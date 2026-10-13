@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "airnox@airnox.app": {
+      "updates": [
+        {
+          "version": "{version}",
+          "update_link": "https://airnox.app/extension/firefox/airnox-{version}.xpi",
+          "update_hash": "sha256:{sha256}",
+          "applications": {
+            "gecko": {
+              "strict_min_version": "140.0"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

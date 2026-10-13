@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AirNox</title>
+    <!-- The default (auto) theme is handled by CSS (prefers-color-scheme), so the
+         common case paints in the right theme with no flash; a manual light/dark
+         override is applied by popup.js once storage is read. -->
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="popup">
+      <header class="hdr">
+        <a
+          class="brand"
+          href="https://airnox.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="airnox.app"
+        >
+          <img
+            class="mark"
+            src="/icons/icon-48.png"
+            width="20"
+            height="20"
+            alt=""
+          />AirNox
+        </a>
+        <button
+          class="toggle"
+          id="themeToggle"
+          type="button"
+          aria-label="Theme: following system"
+          title="Theme: following system"
+        >
+          ◐
+        </button>
+      </header>
+
+      <section
+        class="status checking"
+        id="status"
+        data-state="offline"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <div class="status-text">
+          <div class="label" id="statusLabel">Checking…</div>
+          <div class="sublabel" id="statusSub">
+            Contacting the AirNox Wallet desktop app.
+          </div>
+        </div>
+        <button
+          class="btn-retry"
+          id="retry"
+          type="button"
+          aria-label="Retry connection to AirNox Wallet desktop"
+          hidden
+        >
+          Retry
+        </button>
+      </section>
+
+      <section
+        class="version-banner"
+        id="versionBanner"
+        role="alert"
+        aria-live="assertive"
+        hidden
+      >
+        <span class="version-banner-icon" aria-hidden="true">!</span>
+        <div class="version-banner-text">
+          <div class="version-banner-label" id="versionBannerLabel"></div>
+          <div class="version-banner-detail" id="versionBannerDetail"></div>
+        </div>
+      </section>
+
+      <section
+        class="holder-banner"
+        id="holderBanner"
+        role="status"
+        aria-live="polite"
+        hidden
+      >
+        <span class="holder-banner-icon" aria-hidden="true">!</span>
+        <div class="holder-banner-text">
+          <div class="holder-banner-label" id="holderBannerLabel"></div>
+          <div class="holder-banner-detail" id="holderBannerDetail"></div>
+        </div>
+      </section>
+
+      <ul class="rows">
+        <li class="row">
+          <span class="row-key">Instance</span>
+          <span class="row-val" id="iid" title="">—</span>
+          <button
+            class="copy"
+            id="copyIid"
+            type="button"
+            aria-label="Copy the full instance id"
+          >
+            Copy
+          </button>
+        </li>
+        <li class="row">
+          <span class="row-key">Port</span>
+          <span class="row-val" id="port">—</span>
+          <!-- Decorative reinforcement of the offline state, which the status
+               block already announces via its role="status" live region. -->
+          <span
+            class="row-warn"
+            id="portWarn"
+            title="A wrong port is a common cause of a missing connection"
+            aria-hidden="true"
+            hidden
+            >⚠</span
+          >
+        </li>
+        <li class="row">
+          <span class="row-key">Pairing</span>
+          <span class="row-val" id="pairState">—</span>
+          <button
+            class="copy"
+            id="pairOpen"
+            type="button"
+            aria-label="Pair this extension with AirNox Wallet by a code"
+          >
+            Pair
+          </button>
+        </li>
+      </ul>
+
+      <section class="settings" aria-label="Transport settings">
+        <div class="setting">
+          <span class="row-key">Transport mode</span>
+          <button
+            class="mode-btn"
+            id="modeBtn"
+            type="button"
+            aria-label="Transport mode: Auto. Click to switch."
+          >
+            Auto
+          </button>
+        </div>
+        <div class="setting" id="manualPortRow" hidden>
+          <span class="row-key">Manual port</span>
+          <input
+            class="port-input"
+            id="manualPort"
+            type="number"
+            min="1025"
+            max="65535"
+            inputmode="numeric"
+            aria-label="Manual loopback port"
+          />
+          <button class="btn-save" id="savePort" type="button">Save</button>
+        </div>
+        <p class="settings-hint" id="settingsHint" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <script defer src="popup.js"></script>
+  </body>
+</html>

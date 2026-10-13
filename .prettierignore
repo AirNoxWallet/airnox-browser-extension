@@ -1,0 +1,5 @@
+dist-firefox
+dist-chrome
+dist/
+e2e/.chromium-profile*
+*.zip

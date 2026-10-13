@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Airnox logo</title>
+  <defs>
+    <linearGradient id="airnox-bg" x1="0" y1="512" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A1C5C"/>
+      <stop offset="0.5" stop-color="#125993"/>
+      <stop offset="1" stop-color="#1CA1D3"/>
+    </linearGradient>
+    <!-- metal: polished face, reflections run at 36deg -->
+    <linearGradient id="airnox-metal-face" x1="99" y1="135.9" x2="365.9" y2="329.9" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9A9EA1"/>
+      <stop offset="0.139" stop-color="#C1C5C8"/>
+      <stop offset="0.227" stop-color="#F7F9F9"/>
+      <stop offset="0.3" stop-color="#C6C9CC"/>
+      <stop offset="0.37" stop-color="#A6AAAD"/>
+      <stop offset="0.488" stop-color="#BBBFC2"/>
+      <stop offset="0.682" stop-color="#EEF1F2"/>
+      <stop offset="0.73" stop-color="#E4E7E9"/>
+      <stop offset="0.852" stop-color="#BFC3C6"/>
+      <stop offset="0.912" stop-color="#A0A4A8"/>
+      <stop offset="0.955" stop-color="#787D82"/>
+      <stop offset="1" stop-color="#676C71"/>
+    </linearGradient>
+    <!-- bevels, light from above -->
+    <linearGradient id="airnox-metal-rim-outer" x1="0" y1="72" x2="0" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EAF3F8"/>
+      <stop offset="0.149" stop-color="#DDE8EE"/>
+      <stop offset="0.194" stop-color="#C9D4DB"/>
+      <stop offset="0.246" stop-color="#8E979E"/>
+      <stop offset="0.59" stop-color="#858E95"/>
+      <stop offset="1" stop-color="#737B82"/>
+    </linearGradient>
+    <linearGradient id="airnox-metal-rim-inner" x1="0" y1="112" x2="0" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#707A82"/>
+      <stop offset="0.202" stop-color="#78828A"/>
+      <stop offset="0.335" stop-color="#9AA3AA"/>
+      <stop offset="0.681" stop-color="#AAB2B8"/>
+      <stop offset="1" stop-color="#D3DADF"/>
+    </linearGradient>
+    <linearGradient id="airnox-metal-chevron" x1="322" y1="0" x2="190" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0.03" stop-color="#FFFFFF"/>
+      <stop offset="0.167" stop-color="#D9DADB"/>
+      <stop offset="0.303" stop-color="#AAADB0"/>
+      <stop offset="0.462" stop-color="#7F8285"/>
+      <stop offset="0.598" stop-color="#6B6F72"/>
+      <stop offset="0.742" stop-color="#7B7E81"/>
+      <stop offset="0.879" stop-color="#929598"/>
+      <stop offset="1" stop-color="#9B9EA1"/>
+    </linearGradient>
+    <linearGradient id="airnox-metal-chevron-edge" x1="300" y1="0" x2="318" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EDF3F6"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="airnox-fade" x1="280" y1="0" x2="316" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#000000"/>
+    </linearGradient>
+    <mask id="airnox-fade-leg" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="url(#airnox-fade)"/>
+    </mask>
+    <clipPath id="airnox-clip-shield"><path d="M135.9 336.57 C106.6 289.26 89.25 223.47 95.07 127.68 C191.37 117.14 214.31 101.9 256 72.9 C297.69 101.9 320.63 117.14 416.93 127.68 C422.75 223.47 405.4 289.26 376.1 336.57 L359.2 299.32 C375.32 265.24 386.52 219.4 386.28 156.68 C325.47 149.55 289.77 130.56 256 112.27 C222.23 130.56 186.53 149.55 125.72 156.68 C125.48 219.4 136.68 265.24 152.8 299.32Z"/></clipPath>
+    <clipPath id="airnox-clip-chevron"><path d="M361.79 357.09 C332.15 395.07 294.11 419.33 256 438.43 C234.51 427.66 213.05 415.25 193.09 399.66 L206.89 369.26 C226.89 385.82 245.55 395.23 256 402.9 C273.68 389.93 314.87 371.96 346.24 322.82Z"/></clipPath>
+    <filter id="airnox-shadow" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dy="4" result="blur"/>
+      <feFlood flood-color="#061F45" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="airnox-shadow-soft" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2.5"/>
+      <feOffset dy="3" result="blur"/>
+      <feFlood flood-color="#061F45" flood-opacity="0.35"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- brushed-metal grain: light and dark streaks from stretched noise -->
+    <filter id="airnox-brushed" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.003 0.9" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.9 0 0 0 -0.45" result="lite"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.9 0 0 0 0.45" result="dark"/>
+      <feMerge><feMergeNode in="lite"/><feMergeNode in="dark"/></feMerge>
+    </filter>
+  </defs>
+  <rect id="background" width="512" height="512" rx="107.34" fill="url(#airnox-bg)"/>
+  <g id="shield" filter="url(#airnox-shadow)">
+    <path fill="url(#airnox-metal-face)" d="M135.9 336.57 C106.6 289.26 89.25 223.47 95.07 127.68 C191.37 117.14 214.31 101.9 256 72.9 C297.69 101.9 320.63 117.14 416.93 127.68 C422.75 223.47 405.4 289.26 376.1 336.57 L359.2 299.32 C375.32 265.24 386.52 219.4 386.28 156.68 C325.47 149.55 289.77 130.56 256 112.27 C222.23 130.56 186.53 149.55 125.72 156.68 C125.48 219.4 136.68 265.24 152.8 299.32Z"/>
+    <g clip-path="url(#airnox-clip-shield)" fill="none" stroke-width="9">
+      <path stroke="url(#airnox-metal-rim-outer)" d="M135.9 336.57 C106.6 289.26 89.25 223.47 95.07 127.68 C191.37 117.14 214.31 101.9 256 72.9 C297.69 101.9 320.63 117.14 416.93 127.68 C422.75 223.47 405.4 289.26 376.1 336.57"/>
+      <path stroke="url(#airnox-metal-rim-inner)" d="M359.2 299.32 C375.32 265.24 386.52 219.4 386.28 156.68 C325.47 149.55 289.77 130.56 256 112.27 C222.23 130.56 186.53 149.55 125.72 156.68 C125.48 219.4 136.68 265.24 152.8 299.32"/>
+    </g>
+  <g clip-path="url(#airnox-clip-shield)" opacity="0.2"><rect width="512" height="512" fill="none" filter="url(#airnox-brushed)"/></g>
+  </g>
+  <g id="monogram" filter="url(#airnox-shadow-soft)">
+    <path fill="#FFFFFF" d="M234.33 171.67 L277.67 171.67 L303.86 229.41 C332.45 292.42 253.99 319 209.03 319 L178.01 387.37 L149.79 358.01Z M256 215.48 L224.1 285.78 C269.19 283.87 284.92 279.22 282.3 273.46Z"/>
+    <path fill="#FFFFFF" d="M323.23 272.09 L361.79 357.09 C332.15 395.07 294.11 419.33 256 438.43 C234.51 427.66 213.05 415.25 193.09 399.66 L206.89 369.26 C226.89 385.82 245.55 395.23 256 402.9 C268.97 393.38 294.6 381.17 319.73 355.94 L297.68 307.34 C312.9 295.71 320.05 282.93 323.23 272.09Z"/>
+    <path fill="url(#airnox-metal-chevron)" d="M361.79 357.09 C332.15 395.07 294.11 419.33 256 438.43 C234.51 427.66 213.05 415.25 193.09 399.66 L206.89 369.26 C226.89 385.82 245.55 395.23 256 402.9 C273.68 389.93 314.87 371.96 346.24 322.82Z"/>
+    <path clip-path="url(#airnox-clip-chevron)" fill="none" stroke="url(#airnox-metal-chevron-edge)" stroke-width="9" d="M206.89 369.26 C226.89 385.82 245.55 395.23 256 402.9 C273.68 389.93 314.87 371.96 346.24 322.82"/>
+    <g clip-path="url(#airnox-clip-chevron)" mask="url(#airnox-fade-leg)" opacity="0.2"><rect width="512" height="512" fill="none" filter="url(#airnox-brushed)"/></g>
+  </g>
+</svg>

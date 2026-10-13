@@ -1,0 +1,46 @@
+{
+  "name": "airnox-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "ts-node -T build.ts --firefox --chrome",
+    "build:firefox": "ts-node -T build.ts --firefox",
+    "build:chrome": "ts-node -T build.ts --chrome",
+    "run:firefox": "web-ext run -s dist/dist-firefox",
+    "run:chrome": "web-ext run -s dist/dist-chrome -t chromium",
+    "package": "npm run package:firefox && npm run package:chrome",
+    "package:firefox": "npm run build:firefox && web-ext build -s dist/dist-firefox -n airnox-firefox-{version}.zip --overwrite-dest",
+    "package:chrome": "npm run build:chrome && web-ext build -s dist/dist-chrome -n airnox-chrome-{version}.zip --overwrite-dest",
+    "lint": "eslint --max-warnings=0 . && prettier --check .",
+    "lint:fix": "eslint --fix . && prettier --write .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --require ts-node/register --test test/*.test.ts",
+    "e2e": "npm run build:chrome && node e2e/run_connect_e2e.mjs"
+  },
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "dependencies": {
+    "uuid": "14.0.2",
+    "webextension-polyfill": "0.12.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.61.0",
+    "@types/node": "24.19.0",
+    "@types/webextension-polyfill": "0.12.6",
+    "chokidar": "4.0.3",
+    "esbuild": "0.28.2",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.12.0",
+    "prettier": "2.8.8",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.1",
+    "web-ext": "10.7.0",
+    "ws": "8.22.0"
+  }
+}

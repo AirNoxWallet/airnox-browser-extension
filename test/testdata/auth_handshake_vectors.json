@@ -1,0 +1,174 @@
+{
+  "about": "Known-answer vectors for the web3 loopback mutual authentication. mac = HMAC-SHA-256(secret, transcript); transcript = tag(3, ASCII \"srv\" for the desktop's proof, \"cli\" for the extension's) | iid(36, UTF-8) | client_nonce(16) | server_nonce(16) | port(u32 big-endian) | wallet | major | minor (u16 big-endian each), 81 bytes. Byte strings are lowercase hex. A reject cannot be framed: no transcript, no MAC, and a verification over it is false.",
+  "transcript_bytes": 81,
+  "vectors": [
+    {
+      "name": "current protocol on the first auto port",
+      "secret": "03f5ffd6e17c2acf7af14d6a128bc271b6edb02685fe31a68d2b2bcdc641f78b",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "client_nonce": "3717b177316560f9a795e132b9c18b12",
+      "server_nonce": "be06e4fbcd623f7e93d8110e9329b775",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 3,
+        "minor": 1
+      },
+      "server_transcript": "73727633663262386331652d396134642d346535372d623163362d3064386537663661356234393717b177316560f9a795e132b9c18b12be06e4fbcd623f7e93d8110e9329b77500001fb2000200030001",
+      "server_mac": "7ccb2fabd9f640a6879ad32e22893eaba09e640a7593e5f595b82d181d6733fa",
+      "client_transcript": "636c6933663262386331652d396134642d346535372d623163362d3064386537663661356234393717b177316560f9a795e132b9c18b12be06e4fbcd623f7e93d8110e9329b77500001fb2000200030001",
+      "client_mac": "b3dfccddf7894d9eb64a4502e4aebf533e2e44790c031e1414cdbf411c429374"
+    },
+    {
+      "name": "every field at its maximum",
+      "secret": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "iid": "FFFFFFFF-FFFF-4FFF-BFFF-FFFFFFFFFFFF",
+      "client_nonce": "ffffffffffffffffffffffffffffffff",
+      "server_nonce": "fefefefefefefefefefefefefefefefe",
+      "port": 65535,
+      "version": {
+        "wallet": 65535,
+        "major": 65535,
+        "minor": 65535
+      },
+      "server_transcript": "73727646464646464646462d464646462d344646462d424646462d464646464646464646464646fffffffffffffffffffffffffffffffffefefefefefefefefefefefefefefefe0000ffffffffffffffff",
+      "server_mac": "ca52850a195b2ce780e45104a1b2a941ee900989ce81778a3660b24c88476799",
+      "client_transcript": "636c6946464646464646462d464646462d344646462d424646462d464646464646464646464646fffffffffffffffffffffffffffffffffefefefefefefefefefefefefefefefe0000ffffffffffffffff",
+      "client_mac": "74414b21ad7ae6256585176b4a90b140226765c98e5db0898b80d21bf0f16e5b"
+    },
+    {
+      "name": "every field at its minimum",
+      "secret": "0000000000000000000000000000000000000000000000000000000000000000",
+      "iid": "00000000-0000-4000-8000-000000000000",
+      "client_nonce": "00000000000000000000000000000000",
+      "server_nonce": "00000000000000000000000000000000",
+      "port": 0,
+      "version": {
+        "wallet": 0,
+        "major": 0,
+        "minor": 0
+      },
+      "server_transcript": "73727630303030303030302d303030302d343030302d383030302d303030303030303030303030000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "server_mac": "0ab0239aa97c62dd20438d2d0bbfe8df6b1635546859a277683891951cd0d773",
+      "client_transcript": "636c6930303030303030302d303030302d343030302d383030302d303030303030303030303030000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "client_mac": "4b06c6fc8af712ba37d711238b67e0a592c8162730d904096234ff99f2a3c455"
+    },
+    {
+      "name": "nonces swapped against the first vector",
+      "secret": "03f5ffd6e17c2acf7af14d6a128bc271b6edb02685fe31a68d2b2bcdc641f78b",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "client_nonce": "be06e4fbcd623f7e93d8110e9329b775",
+      "server_nonce": "3717b177316560f9a795e132b9c18b12",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 3,
+        "minor": 1
+      },
+      "server_transcript": "73727633663262386331652d396134642d346535372d623163362d306438653766366135623439be06e4fbcd623f7e93d8110e9329b7753717b177316560f9a795e132b9c18b1200001fb2000200030001",
+      "server_mac": "2900232118b3498eadc6eb5f51ccd5560ae0266ff74a594fe515d7a2199fc206",
+      "client_transcript": "636c6933663262386331652d396134642d346535372d623163362d306438653766366135623439be06e4fbcd623f7e93d8110e9329b7753717b177316560f9a795e132b9c18b1200001fb2000200030001",
+      "client_mac": "8f91dbf303ddbd8e1f2150779cfe2852e1664db08eae3fa2a63c3e77acc3d2f0"
+    },
+    {
+      "name": "another port and a counting secret",
+      "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "iid": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "client_nonce": "000102030405060708090a0b0c0d0e0f",
+      "server_nonce": "101112131415161718191a1b1c1d1e1f",
+      "port": 30114,
+      "version": {
+        "wallet": 2,
+        "major": 3,
+        "minor": 32769
+      },
+      "server_transcript": "73727661316232633364342d653566362d346137622d386339642d306531663261336234633564000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f000075a2000200038001",
+      "server_mac": "b9b1ff77da3d56099738227be505ede7b5e7ad2e99041126fb66c4d11aa1ffb6",
+      "client_transcript": "636c6961316232633364342d653566362d346137622d386339642d306531663261336234633564000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f000075a2000200038001",
+      "client_mac": "f65f6d2aaf22834e1ba149063f2cbd1c70da68f633aec8e52f3785156090f75d"
+    }
+  ],
+  "rejects": [
+    {
+      "name": "iid one byte short",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b4",
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      }
+    },
+    {
+      "name": "iid one byte long",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b490",
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      }
+    },
+    {
+      "name": "iid of 36 characters but 37 UTF-8 bytes",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b4é",
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      }
+    },
+    {
+      "name": "empty iid",
+      "iid": "",
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      }
+    },
+    {
+      "name": "minor past 16 bits",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 65536
+      }
+    },
+    {
+      "name": "major past 16 bits",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "version": {
+        "wallet": 2,
+        "major": 65536,
+        "minor": 1
+      }
+    },
+    {
+      "name": "wallet past 16 bits",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "version": {
+        "wallet": 65536,
+        "major": 2,
+        "minor": 1
+      }
+    },
+    {
+      "name": "negative major",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "version": {
+        "wallet": 2,
+        "major": -1,
+        "minor": 1
+      }
+    },
+    {
+      "name": "negative wallet",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "version": {
+        "wallet": -1,
+        "major": 2,
+        "minor": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AirNox e2e dApp</title>
+  </head>
+  <body>
+    <h1>AirNox connection e2e</h1>
+    <pre id="status">waiting for provider…</pre>
+    <pre id="result"></pre>
+    <script>
+      // A minimal multi-ecosystem dApp. The extension injects all five provider
+      // surfaces at document_start; this page discovers each the way a real dApp
+      // does — window.ethereum for EIP-1193, the wallet-standard registration
+      // events for Solana and Sui, window.airnox.tonconnect for TON Connect,
+      // window.tronLink / window.tronWeb for TRON — and exposes one hook per
+      // ecosystem for the Playwright harness to drive:
+      //   window.__providerReady() → boolean (EVM only; the connection probe)
+      //   window.__walletsReady()  → boolean (all five surfaces present)
+      //   window.__connect()       → Promise<{ ok, accounts?, error? }>
+      //   window.__evmFlow() / __solanaFlow() / __suiFlow() / __tonFlow()
+      //   / __tronFlow()           → Promise<{ <step>: StepResult }>
+      //   window.__forgeSysFrame() → Promise<StepResult>  (hostile, see below)
+      //
+      // Every flow hook returns the SAME step-keyed shape whether the wallet
+      // approved or refused, so the approved and rejected scenarios drive
+      // identical page code and differ only in what the harness asserts.
+      const statusEl = document.getElementById('status');
+
+      // Run one step and capture its outcome rather than letting a rejection
+      // abort the whole flow — a refused signature must still let the following
+      // steps report, and the wire ErrorCode is the thing under test.
+      const step = async (fn) => {
+        try {
+          return { ok: true, value: await fn() };
+        } catch (e) {
+          return {
+            ok: false,
+            error: { code: e && e.code, message: e && e.message },
+          };
+        }
+      };
+
+      // Uint8Array does not survive the page→harness boundary; hex does.
+      const hex = (bytes) =>
+        Array.from(bytes ?? [])
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+
+      const shapeAccounts = (accounts) =>
+        (accounts ?? []).map((a) => ({
+          address: a.address,
+          publicKey: hex(a.publicKey),
+          chains: a.chains,
+        }));
+
+      // ── Wallet-Standard discovery ────────────────────────────────────────────
+      // Two paths, per the standard: the wallet dispatches register-wallet (which
+      // it does at document_start, before this script exists), and it answers a
+      // late dApp's app-ready. Only the second can reach us here, but both are
+      // wired so this page stays a faithful consumer. The detail is the full
+      // {register, get, on} API a real dApp exposes, not just `register` — a
+      // wallet that reached for `get` would otherwise throw an uncaught page
+      // error instead of failing an assertion.
+      const standardWallets = [];
+      const registerApi = {
+        register: (...wallets) => {
+          for (const wallet of wallets) {
+            // Dedupe on object identity, as @wallet-standard/app does. Keying on
+            // an advertised chain would collapse both adapters into one if a
+            // regression emptied `chains`, hiding the bug behind a readiness
+            // timeout.
+            if (!standardWallets.includes(wallet)) {
+              standardWallets.push(wallet);
+            }
+          }
+          return () => {};
+        },
+        get: () => standardWallets.slice(),
+        on: () => () => {},
+      };
+      window.addEventListener('wallet-standard:register-wallet', (event) => {
+        try {
+          event.detail(registerApi);
+        } catch (e) {
+          /* a wallet that cannot register is simply absent */
+        }
+      });
+      window.dispatchEvent(
+        new CustomEvent('wallet-standard:app-ready', { detail: registerApi })
+      );
+
+      const stdWallet = (chain) =>
+        standardWallets.find((w) => (w.chains ?? []).includes(chain));
+      const feature = (wallet, name) => wallet.features[name];
+
+      // ── Readiness ────────────────────────────────────────────────────────────
+      window.__providerReady = () =>
+        typeof window.ethereum !== 'undefined' &&
+        typeof window.ethereum.request === 'function';
+
+      window.__walletsReady = () =>
+        window.__providerReady() &&
+        stdWallet('solana:mainnet') !== undefined &&
+        stdWallet('sui:mainnet') !== undefined &&
+        typeof window.airnox?.tonconnect?.connect === 'function' &&
+        typeof window.tronLink?.request === 'function' &&
+        typeof window.tronWeb?.trx?.sign === 'function';
+
+      // ── Hostile: a page forging a `sys` control-plane frame ──────────────────
+      // The inpage↔content channel is a plain window.postMessage with a public
+      // tag and no secret (deliberately: a page can read any secret the inpage script holds),
+      // so ANY page script can synthesize this frame. That is exactly why the
+      // content script and the SW both gate on the dApp-namespace allowlist. A
+      // dApp would never do this; the harness does it so the gate has something
+      // to refuse, and so "no page frame reached the sys namespace" can fail.
+      window.__forgeSysFrame = () =>
+        new Promise((resolve) => {
+          const id = 'forged-sys-' + String(Date.now());
+          const timer = setTimeout(
+            () => finish({ ok: false, error: { message: 'no reply' } }),
+            3000
+          );
+          const finish = (value) => {
+            clearTimeout(timer);
+            window.removeEventListener('message', onMessage);
+            resolve(value);
+          };
+          const onMessage = (event) => {
+            const d = event.data;
+            if (d?.channel !== 'airnox:content->page' || d.id !== id) {
+              return;
+            }
+            finish({
+              ok: true,
+              value: { ok: d.ok, error: d.error, result: d.result },
+            });
+          };
+          window.addEventListener('message', onMessage);
+          window.postMessage(
+            {
+              channel: 'airnox:page->content',
+              id,
+              ns: 'sys',
+              method: 'sys_ping',
+            },
+            '*'
+          );
+        });
+
+      // ── EVM (EIP-1193) ───────────────────────────────────────────────────────
+      window.__connect = async () => {
+        try {
+          const accounts = await window.ethereum.request({
+            method: 'eth_requestAccounts',
+          });
+          document.getElementById('result').textContent =
+            'accounts: ' + JSON.stringify(accounts);
+          return { ok: true, accounts };
+        } catch (e) {
+          const err = { code: e && e.code, message: e && e.message };
+          document.getElementById('result').textContent =
+            'error: ' + JSON.stringify(err);
+          return { ok: false, error: err };
+        }
+      };
+
+      // The MetaMask-era properties a legacy dApp reads straight off the
+      // provider instead of asking eth_chainId / eth_accounts. Read as they are,
+      // with no coercion: a missing property must reach the harness as missing.
+      const legacyProps = () =>
+        step(async () => ({
+          chainId: window.ethereum.chainId,
+          networkVersion: window.ethereum.networkVersion,
+          selectedAddress: window.ethereum.selectedAddress,
+        }));
+
+      window.__evmFlow = async () => {
+        const legacyBefore = await legacyProps();
+        const connect = await step(() =>
+          window.ethereum.request({ method: 'eth_requestAccounts' })
+        );
+        // A refused connect ends the flow: the later steps need the granted
+        // account, and running them anyway would report a local TypeError where
+        // the harness is asserting a wire ErrorCode.
+        if (!connect.ok) {
+          return { connect, legacyBefore };
+        }
+        const from = connect.value[0];
+        const read = (method) =>
+          step(() => window.ethereum.request({ method }));
+        return {
+          connect,
+          legacyBefore,
+          legacyAfterConnect: await legacyProps(),
+          // All four cached reads, so the harness can assert both the answer AND
+          // that none of them appears on the wire. Calling only one would leave
+          // the other three free to start round-tripping unnoticed.
+          chainId: await read('eth_chainId'),
+          netVersion: await read('net_version'),
+          accounts: await read('eth_accounts'),
+          coinbase: await read('eth_coinbase'),
+          sign: await step(() =>
+            window.ethereum.request({
+              method: 'personal_sign',
+              params: ['0x68656c6c6f', from],
+            })
+          ),
+          // A plain-text challenge, as testnet.soniclabs.com's faucet sends
+          // it: the wire must carry its UTF-8 bytes as 0x-hex.
+          signText: await step(() =>
+            window.ethereum.request({
+              method: 'personal_sign',
+              params: ['Please sign this text:\n\nnonce 1', from],
+            })
+          ),
+          tx: await step(() =>
+            window.ethereum.request({
+              method: 'eth_sendTransaction',
+              params: [{ from, to: from, value: '0x1' }],
+            })
+          ),
+          // EIP-3326. Everything after this must ride the NEW chain key, which is
+          // what makes the cached chainId and the wire `chain` field provably
+          // move together instead of both being hardcoded to mainnet.
+          switchChain: await step(() =>
+            window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x89' }],
+            })
+          ),
+          chainIdAfterSwitch: await read('eth_chainId'),
+          legacyAfterSwitch: await legacyProps(),
+          signAfterSwitch: await step(() =>
+            window.ethereum.request({
+              method: 'personal_sign',
+              params: ['0x68656c6c6f', from],
+            })
+          ),
+        };
+      };
+
+      // ── Solana (Wallet Standard) ─────────────────────────────────────────────
+      window.__solanaFlow = async () => {
+        const wallet = stdWallet('solana:mainnet');
+        if (wallet === undefined) {
+          return {
+            connect: { ok: false, error: { message: 'no solana wallet' } },
+          };
+        }
+        const connect = await step(async () =>
+          shapeAccounts(
+            (
+              await feature(wallet, 'standard:connect').connect()
+            ).accounts
+          )
+        );
+        if (!connect.ok) {
+          return { connect };
+        }
+        const account = wallet.accounts[0];
+        const message = new Uint8Array([1, 2, 3, 4]);
+        return {
+          connect,
+          signMessage: await step(async () => {
+            const [out] = await feature(
+              wallet,
+              'solana:signMessage'
+            ).signMessage({ account, message });
+            return {
+              signature: hex(out.signature),
+              signedMessage: hex(out.signedMessage),
+            };
+          }),
+          signTransaction: await step(async () => {
+            const [out] = await feature(
+              wallet,
+              'solana:signTransaction'
+            ).signTransaction({
+              account,
+              transaction: message,
+              chain: 'solana:mainnet',
+            });
+            return { signedTransaction: hex(out.signedTransaction) };
+          }),
+          // The Solana send options ride along — the desktop refuses an unknown key
+          // with 1100, so a green result also proves the whitelist is intact.
+          signAndSend: await step(async () => {
+            const [out] = await feature(
+              wallet,
+              'solana:signAndSendTransaction'
+            ).signAndSendTransaction({
+              account,
+              transaction: message,
+              chain: 'solana:mainnet',
+              options: {
+                skipPreflight: true,
+                preflightCommitment: 'confirmed',
+              },
+            });
+            return { signature: hex(out.signature) };
+          }),
+        };
+      };
+
+      // ── Sui (Wallet Standard) ────────────────────────────────────────────────
+      window.__suiFlow = async () => {
+        const wallet = stdWallet('sui:mainnet');
+        if (wallet === undefined) {
+          return {
+            connect: { ok: false, error: { message: 'no sui wallet' } },
+          };
+        }
+        const connect = await step(async () =>
+          shapeAccounts(
+            (
+              await feature(wallet, 'standard:connect').connect()
+            ).accounts
+          )
+        );
+        if (!connect.ok) {
+          return { connect };
+        }
+        const account = wallet.accounts[0];
+        // The Sui adapter ships transaction.toJSON() — the dApp's unresolved
+        // transaction object, which the desktop resolves and builds.
+        const transaction = {
+          toJSON: async () => '{"version":2,"commands":[]}',
+        };
+        return {
+          connect,
+          signPersonalMessage: await step(() =>
+            feature(wallet, 'sui:signPersonalMessage').signPersonalMessage({
+              account,
+              message: new Uint8Array([1, 2, 3, 4]),
+            })
+          ),
+          signTransaction: await step(() =>
+            feature(wallet, 'sui:signTransaction').signTransaction({
+              account,
+              transaction,
+              chain: 'sui:mainnet',
+            })
+          ),
+          signAndExecute: await step(() =>
+            feature(
+              wallet,
+              'sui:signAndExecuteTransaction'
+            ).signAndExecuteTransaction({
+              account,
+              transaction,
+              chain: 'sui:mainnet',
+            })
+          ),
+        };
+      };
+
+      // ── TON Connect ──────────────────────────────────────────────────────────
+      // The bridge answers with ConnectEvent / WalletResponse objects rather than
+      // throwing, so these steps stay ok:true and the harness inspects the
+      // payload — that mapping (wire ErrorCode → TON Connect code) is the thing
+      // under test on the rejected path.
+      window.__tonFlow = async () => {
+        const bridge = window.airnox?.tonconnect;
+        if (bridge === undefined) {
+          return {
+            connect: { ok: false, error: { message: 'no ton bridge' } },
+          };
+        }
+        const connect = await step(() =>
+          bridge.connect(2, {
+            // A real dApp's manifest lives on its own origin, port included.
+            manifestUrl: `${location.origin}/tonconnect-manifest.json`,
+            items: [{ name: 'ton_proof', payload: 'e2e-proof' }],
+          })
+        );
+        // TON Connect answers a refusal as a connect_error EVENT rather than a
+        // rejection, so "connected" is a payload check, not an ok check.
+        if (!connect.ok || connect.value?.event !== 'connect') {
+          return { connect };
+        }
+        return {
+          connect,
+          tx: await step(() =>
+            bridge.send({
+              method: 'sendTransaction',
+              params: [
+                JSON.stringify({
+                  valid_until: 1900000000,
+                  messages: [{ address: '0:00', amount: '1' }],
+                }),
+              ],
+              id: '1',
+            })
+          ),
+          signData: await step(() =>
+            bridge.send({
+              method: 'signData',
+              params: [JSON.stringify({ type: 'text', text: 'e2e' })],
+              id: '2',
+            })
+          ),
+          disconnect: await step(() =>
+            bridge.send({ method: 'disconnect', params: [], id: '3' })
+          ),
+        };
+      };
+
+      // ── TRON ─────────────────────────────────────────────────────────────────
+      window.__tronFlow = async () => {
+        const connect = await step(() =>
+          window.tronLink.request({ method: 'tron_requestAccounts' })
+        );
+        // trx.* refuse locally without a connected account (Unauthorized), so a
+        // refused connect must end the flow for the wire codes to stay readable.
+        if (!connect.ok) {
+          return { connect };
+        }
+        const unsigned = {
+          txID: 'ab'.repeat(32),
+          raw_data_hex: '0a02',
+          raw_data: { contract: [] },
+        };
+        const signed = await step(() => window.tronWeb.trx.sign(unsigned));
+        const out = {
+          connect,
+          defaultAddress: window.tronWeb.defaultAddress,
+          ready: window.tronWeb.ready,
+          signMessage: await step(() =>
+            window.tronWeb.trx.signMessageV2('hello')
+          ),
+          sign: signed,
+        };
+        // A real dApp broadcasts the SIGNED transaction or nothing. Submitting
+        // the unsigned one after a refused signature would exercise a path no
+        // dApp takes, and the desktop's broadcast has no confirmation of its own
+        // to refuse it with.
+        if (signed.ok) {
+          out.broadcast = await step(() =>
+            window.tronWeb.trx.sendRawTransaction(signed.value)
+          );
+        }
+        return out;
+      };
+
+      const tick = () => {
+        statusEl.textContent = window.__providerReady()
+          ? 'provider ready'
+          : 'waiting for provider…';
+      };
+      tick();
+      // Stop once the provider is in: a forever-ticking interval keeps the page
+      // from ever going idle, which matters when the harness waits on it.
+      const ticker = setInterval(() => {
+        tick();
+        if (window.__providerReady()) {
+          clearInterval(ticker);
+        }
+      }, 100);
+    </script>
+  </body>
+</html>

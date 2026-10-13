@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pair AirNox with AirNox Wallet</title>
+    <!-- The popup's stylesheet: one look for every extension page. -->
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="popup pairing">
+      <header class="hdr">
+        <span class="brand">
+          <img
+            class="mark"
+            src="/icons/icon-48.png"
+            width="20"
+            height="20"
+            alt=""
+          />AirNox
+        </span>
+      </header>
+
+      <section
+        class="status"
+        id="pairStatus"
+        data-state="info"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <div class="status-text">
+          <div class="label" id="pairTitle">
+            Pair this browser with AirNox Wallet
+          </div>
+          <div class="sublabel" id="pairDetail"></div>
+        </div>
+      </section>
+
+      <form class="pair-form" id="pairForm" autocomplete="off" hidden>
+        <input
+          class="port-input code-input"
+          id="pairCode"
+          type="text"
+          inputmode="text"
+          maxlength="32"
+          spellcheck="false"
+          autocapitalize="characters"
+          autocomplete="off"
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          aria-label="The pairing code shown in AirNox Wallet"
+        />
+        <button class="btn-save" id="pairSubmit" type="submit">Pair</button>
+      </form>
+
+      <div class="pair-actions">
+        <button class="btn-save" id="pairStart" type="button">Pair</button>
+        <button class="btn-retry" id="pairAgain" type="button" hidden>
+          Try again
+        </button>
+        <button class="mode-btn" id="pairClose" type="button">Close</button>
+      </div>
+    </div>
+
+    <script defer src="pairing.js"></script>
+  </body>
+</html>

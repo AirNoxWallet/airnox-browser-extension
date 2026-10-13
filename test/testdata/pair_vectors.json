@@ -1,0 +1,392 @@
+{
+  "about": "Known-answer vectors for pairing a browser extension with the desktop by a one-time code. The code: 16 characters of Crockford's base32 alphabet; the first 15 are the first 75 bits of 10 random bytes read big-endian, 5 bits a character; the 16th is the alphabet's character at the top 5 bits of SHA-256(check_label | the 15 characters). What a person types is read case-insensitively, I and L as 1, O as 0, spaces and hyphens dropped; anything else outside the alphabet is refused. The exchange: th = SHA-256(transcript), transcript = transcript_label(19) | iid(36) | client_public(32) | server_public(32) | client_nonce(16) | server_nonce(16) | port(u32 big-endian) | wallet | major | minor (u16 big-endian each), 161 bytes; shared = X25519, an all-zero result refused; prk = HKDF-SHA-256-Extract(salt = th, ikm = shared | code); k_confirm = HKDF-Expand(prk, confirm_label, 32); secret = HKDF-Expand(prk, secret_label, 32); mac_cli = HMAC-SHA-256(k_confirm, \"cli\" | th); mac_srv = HMAC-SHA-256(k_confirm, \"srv\" | th). Byte strings are lowercase hex.",
+  "alphabet": "0123456789ABCDEFGHJKMNPQRSTVWXYZ",
+  "check_label": "airnox-web3-pair-check-v1",
+  "transcript_label": "airnox-web3-pair-v1",
+  "confirm_label": "airnox-web3-pair-confirm-v1",
+  "secret_label": "airnox-web3-pair-secret-v1",
+  "transcript_bytes": 161,
+  "code_from_entropy": [
+    {
+      "name": "the first random draw",
+      "entropy": "2d99a7be8dbbfea2af00",
+      "code": "5PCTFFMDQFZA5BRF",
+      "grouped": "5PCT-FFMD-QFZA-5BRF"
+    },
+    {
+      "name": "all bits zero",
+      "entropy": "00000000000000000000",
+      "code": "000000000000000X",
+      "grouped": "0000-0000-0000-000X"
+    },
+    {
+      "name": "all bits one",
+      "entropy": "ffffffffffffffffffff",
+      "code": "ZZZZZZZZZZZZZZZ4",
+      "grouped": "ZZZZ-ZZZZ-ZZZZ-ZZZ4"
+    },
+    {
+      "name": "the unused last five bits set",
+      "entropy": "0000000000000000001f",
+      "code": "000000000000000X",
+      "grouped": "0000-0000-0000-000X"
+    },
+    {
+      "name": "a counting draw",
+      "entropy": "0102030405060708090a",
+      "code": "041061050R3GG286",
+      "grouped": "0410-6105-0R3G-G286"
+    }
+  ],
+  "code_accepts": [
+    {
+      "name": "canonical",
+      "typed": "5PCTFFMDQFZA5BRF",
+      "code": "5PCTFFMDQFZA5BRF"
+    },
+    {
+      "name": "grouped as shown",
+      "typed": "5PCT-FFMD-QFZA-5BRF",
+      "code": "5PCTFFMDQFZA5BRF"
+    },
+    {
+      "name": "lower case",
+      "typed": "5pct-ffmd-qfza-5brf",
+      "code": "5PCTFFMDQFZA5BRF"
+    },
+    {
+      "name": "spaces for hyphens",
+      "typed": "5PCT FFMD QFZA 5BRF",
+      "code": "5PCTFFMDQFZA5BRF"
+    },
+    {
+      "name": "separators anywhere, doubled, leading and trailing",
+      "typed": " -5PC--TFFMDQ  FZA5BRF- ",
+      "code": "5PCTFFMDQFZA5BRF"
+    },
+    {
+      "name": "I, L read as 1 and O as 0",
+      "typed": "o4Io-6lo5-oR3G-G286",
+      "code": "041061050R3GG286"
+    }
+  ],
+  "code_rejects": [
+    {
+      "name": "empty",
+      "typed": "",
+      "reason": "length"
+    },
+    {
+      "name": "separators only",
+      "typed": " - -",
+      "reason": "length"
+    },
+    {
+      "name": "one character short",
+      "typed": "5PCTFFMDQFZA5BR",
+      "reason": "length"
+    },
+    {
+      "name": "one character long",
+      "typed": "5PCTFFMDQFZA5BRF0",
+      "reason": "length"
+    },
+    {
+      "name": "the check character off by one",
+      "typed": "5PCTFFMDQFZA5BRG",
+      "reason": "check"
+    },
+    {
+      "name": "two characters transposed",
+      "typed": "P5CTFFMDQFZA5BRF",
+      "reason": "check"
+    },
+    {
+      "name": "U is not in the alphabet",
+      "typed": "UPCTFFMDQFZA5BRF",
+      "reason": "character"
+    },
+    {
+      "name": "an underscore separator",
+      "typed": "5PCTFFMD_QFZA5BRF",
+      "reason": "character"
+    },
+    {
+      "name": "a tab",
+      "typed": "5PCTFFMD\tQFZA5BRF",
+      "reason": "character"
+    },
+    {
+      "name": "a non-ASCII letter",
+      "typed": "5PCTFFMDQFZA5BRé",
+      "reason": "character"
+    },
+    {
+      "name": "a full-width digit",
+      "typed": "5PCTFFMDQFZA5BR１",
+      "reason": "character"
+    }
+  ],
+  "code_not_canonical": [
+    {
+      "name": "a lower-case body",
+      "text": "5pctffmdqfza5br4"
+    },
+    {
+      "name": "U in the body",
+      "text": "UPCTFFMDQFZA5BRQ"
+    },
+    {
+      "name": "a hyphen in the body",
+      "text": "5PCT-FMDQFZA5BRM"
+    },
+    {
+      "name": "I in the body",
+      "text": "IPCTFFMDQFZA5BR9"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "RFC 7748 6.1 keys, the extension as Alice",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "client_private": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+      "client_public": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+      "server_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "server_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "client_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "server_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      },
+      "code": "5PCTFFMDQFZA5BRF",
+      "transcript": "6169726e6f782d776562332d706169722d763133663262386331652d396134642d346535372d623163362d3064386537663661356234398520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6ade9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f5fc3ab6cd81dacb75b3be69b570e1594ab91ed9756220b214d9fc0c00020bbb000001fb2000200020001",
+      "th": "31d04f77ce3246bf4f089bb40e9c852853a18176ee77a34b25c0010b3e35ccb0",
+      "shared": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+      "prk": "f5430125fecc6e8f4f4c7995b9edfe4c3b35d19bb012850782c1cdfe9c18a899",
+      "k_confirm": "dfdc61d5c37417414d8e5ef4e97e1c15d8d7aec4a761fdc3c334796d66f6252e",
+      "secret": "68e6f3b3783a26747c51948211ce0673732158d14daa38ce6f6118c28f3238e0",
+      "mac_cli": "d58a2c4005ead0e7ec1751b44d7ba59faf1fbdb78a8d94d9fdcee713829b960e",
+      "mac_srv": "9776cc36a7daf83a6b443d5227b185d22147f5b417a6f7299f5310dac17e3d91"
+    },
+    {
+      "name": "every field at its maximum",
+      "iid": "FFFFFFFF-FFFF-4FFF-BFFF-FFFFFFFFFFFF",
+      "client_private": "8c7868e320a748eef83b57b2178f23cbbd4cb11c4687351afcc58f08552f9c15",
+      "client_public": "e40d8813004cbfeea14dd1a0aab066ffd30eb32c9339c9f882ac25ef9a6b4848",
+      "server_private": "20bb0440155def153d8fc4aa1826d63516389f78ea7be2ee48562dd055ab4962",
+      "server_public": "b982de0c4b07f5c4693bd0994e771cbda9d7bc0f9f95c8909391a3ea5b067226",
+      "client_nonce": "ffffffffffffffffffffffffffffffff",
+      "server_nonce": "fefefefefefefefefefefefefefefefe",
+      "port": 65535,
+      "version": {
+        "wallet": 65535,
+        "major": 65535,
+        "minor": 65535
+      },
+      "code": "ZZZZZZZZZZZZZZZ4",
+      "transcript": "6169726e6f782d776562332d706169722d763146464646464646462d464646462d344646462d424646462d464646464646464646464646e40d8813004cbfeea14dd1a0aab066ffd30eb32c9339c9f882ac25ef9a6b4848b982de0c4b07f5c4693bd0994e771cbda9d7bc0f9f95c8909391a3ea5b067226fffffffffffffffffffffffffffffffffefefefefefefefefefefefefefefefe0000ffffffffffffffff",
+      "th": "3b6114d8d19bef615232870e8166fff9a6e6b023bc17e70081a11a7f00b9d66e",
+      "shared": "d64f422697205efd3a2b3d48979a5d5dceb4c44153e4e1a177027826b9a19d48",
+      "prk": "c7ec33dbb003e2d81ac451171621b7e27070c2dd26ed50f7a06efc2bfbb6b304",
+      "k_confirm": "28c04ccce63077cffa682bc8b22c28a6eeaf7ff8d1e688236dbf304642d4859f",
+      "secret": "f435db5d436cb34e9dd389c34f446ed4284b0877eb55ad1e225c36dc3b2611b3",
+      "mac_cli": "067174ddcda6aa8960141dad87807b6852866df4aae3ede7eeb07c19ba6846a1",
+      "mac_srv": "a428506e5dba00b0301d9e55b1e3565290f10639bc8604e9529982affcf8c2f6"
+    },
+    {
+      "name": "every field at its minimum",
+      "iid": "00000000-0000-4000-8000-000000000000",
+      "client_private": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "client_public": "8f40c5adb68f25624ae5b214ea767a6ec94d829d3d7b5e1ad1ba6f3e2138285f",
+      "server_private": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "server_public": "358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254",
+      "client_nonce": "00000000000000000000000000000000",
+      "server_nonce": "00000000000000000000000000000000",
+      "port": 0,
+      "version": {
+        "wallet": 0,
+        "major": 0,
+        "minor": 0
+      },
+      "code": "000000000000000X",
+      "transcript": "6169726e6f782d776562332d706169722d763130303030303030302d303030302d343030302d383030302d3030303030303030303030308f40c5adb68f25624ae5b214ea767a6ec94d829d3d7b5e1ad1ba6f3e2138285f358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "th": "e9d2637ce0cf91e7a58bc3dde736b5362105dfc84742961428a4cc336cb1ef76",
+      "shared": "9663aa1da97e848a914a436d04163dfbb89178f107f1b5b77ed3854203382854",
+      "prk": "628fa2b69f826d43749559ec6fc5116751debc1d201c84c15a8235d5983b7f13",
+      "k_confirm": "e2602c2fa3f0d8463e3aa2cb38fc921a117012a14bae38eeb6c519c180ce157d",
+      "secret": "a3f07da9e6aa0c1d16fd600f715fce61919adfe0080aa55f21dcd02a1662a052",
+      "mac_cli": "3f298efbd874e11221ca6927ae25f43fc80a11fc41c52473b3b08fd5f29929a7",
+      "mac_srv": "791e200f6a61c84ab5f7fcd7150409739379278d40cac4751239092ab906e511"
+    }
+  ],
+  "binding": [
+    {
+      "name": "another code",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "server_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "server_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "client_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "server_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      },
+      "code": "041061050R3GG286",
+      "th": "31d04f77ce3246bf4f089bb40e9c852853a18176ee77a34b25c0010b3e35ccb0",
+      "mac_cli": "255c7039776b22694ddce02195157a40e101157f8953c8606a512091f00da74e",
+      "mac_srv": "f5c9f18de7a511afb01e0eb5a269c0b2a587b5ae47b50b3c811e921b023e9ef7"
+    },
+    {
+      "name": "the port one higher",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "server_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "server_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "client_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "server_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "port": 8115,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      },
+      "code": "5PCTFFMDQFZA5BRF",
+      "th": "559716e1095ec9d0f73b574c9d45e2349113c4fbc0ac641d453b9a67774e146b",
+      "mac_cli": "ff439ffc31d8fe2d26975cae6f4163f613678595e1cf9ae2a32e9e5f71c7682d",
+      "mac_srv": "00a2f88345fa59ae850daa2bbc4add7fc5cee8bdc229fe81a2eac2bde924a252"
+    },
+    {
+      "name": "the minor version one higher",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "server_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "server_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "client_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "server_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 2
+      },
+      "code": "5PCTFFMDQFZA5BRF",
+      "th": "cddfbf9cfca7879cb1ef0e7a7573b99b826f212adb1ab34e233ed3642538614d",
+      "mac_cli": "0d9453c04b0e6f2c43f66e1a746a7ade685e5b1df1c4e382ba83a862b0e8c43d",
+      "mac_srv": "9e75c53dc3d18125818f76ba900ecec38884d56f3d7ef2060afc097ab163dc1d"
+    },
+    {
+      "name": "another iid",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b4a",
+      "server_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "server_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "client_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "server_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      },
+      "code": "5PCTFFMDQFZA5BRF",
+      "th": "b6f046703fb5e670c1476c433c57edb5476a3d0bdc53c1994a015f6e19adb47c",
+      "mac_cli": "651b6fcbba41a1d60453038963f8c47fdae8b1792671f0ee10baa2d7e69be192",
+      "mac_srv": "f22c4ae2bbf3d79dd62da5b0b524d70b4569ee4e9ae1b87b32091a1492839298"
+    },
+    {
+      "name": "the nonces swapped",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "server_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "server_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "client_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "server_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      },
+      "code": "5PCTFFMDQFZA5BRF",
+      "th": "87fda6553a41baac6913919d79edab9c2d8efcb889f5527b961c743e45af634d",
+      "mac_cli": "cdaf45ddefface5ab61350e05f0ff9f6387c24f58cf0ca079493a545c7fc0589",
+      "mac_srv": "f016441cd5ffdcd52e768a37d60269075e2747985b48eed7f8643abcff82dbe7"
+    },
+    {
+      "name": "the server's key from another scalar",
+      "iid": "3f2b8c1e-9a4d-4e57-b1c6-0d8e7f6a5b49",
+      "server_private": "718a4c400592772b3a8380f2a8a4424779a8066ff0b12c2c37ceb8eda78648cd",
+      "server_public": "e571ca07b57f42018a3ae289929f3c2c553a164c6c46e4815f2f7835d6385543",
+      "client_nonce": "5fc3ab6cd81dacb75b3be69b570e1594",
+      "server_nonce": "ab91ed9756220b214d9fc0c00020bbb0",
+      "port": 8114,
+      "version": {
+        "wallet": 2,
+        "major": 2,
+        "minor": 1
+      },
+      "code": "5PCTFFMDQFZA5BRF",
+      "th": "996b686458da38882d88b512ec5aee122ff26787c185c3f848f5bd89b46fd854",
+      "mac_cli": "e8e84ea5186d9f8ec445ca68de455591942eb21299a22da8404884e64e173fbd",
+      "mac_srv": "f9668ee30355b859b54f34d421074a953f9e4c9fbd29ab465148b02ccf8d11ca"
+    }
+  ],
+  "low_order_publics": [
+    {
+      "name": "zero",
+      "public": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "one",
+      "public": "0100000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "order 8",
+      "public": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800"
+    },
+    {
+      "name": "order 8, the other",
+      "public": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157"
+    },
+    {
+      "name": "p - 1",
+      "public": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    },
+    {
+      "name": "p",
+      "public": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    },
+    {
+      "name": "p + 1",
+      "public": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    }
+  ],
+  "length_rejects": [
+    {
+      "name": "a public key one byte short",
+      "field": "public",
+      "bytes": 31
+    },
+    {
+      "name": "a public key one byte long",
+      "field": "public",
+      "bytes": 33
+    },
+    {
+      "name": "a confirmation one byte short",
+      "field": "mac",
+      "bytes": 31
+    },
+    {
+      "name": "a confirmation one byte long",
+      "field": "mac",
+      "bytes": 33
+    },
+    {
+      "name": "an empty confirmation",
+      "field": "mac",
+      "bytes": 0
+    }
+  ]
+}

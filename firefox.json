@@ -1,0 +1,15 @@
+{
+  "background": {
+    "scripts": ["src/background/background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "airnox@airnox.app",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      },
+      "update_url": "https://airnox.app/extension/firefox/updates.json"
+    }
+  }
+}

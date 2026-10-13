@@ -1,0 +1,544 @@
+/* AirNox extension popup: a compact status bar and detail rows.
+ * A connection-state surface only: NO wallet/account/asset/price data.
+ * Tokens are mapped 1:1 from the desktop's res/config/theme.json so the popup
+ * feels part of the same product. Light is :root; dark applies via BOTH
+ * prefers-color-scheme (auto) AND [data-theme="dark"] (manual toggle wins). */
+
+:root {
+  /* palette — light (theme.json themes.light) */
+  --s-window: #e6e7e9;
+  --s-surface: #ffffff;
+  --s-surface-alt: #f1f2f4;
+  --s-text: #2c2d38;
+  --s-text-muted: #5f676e;
+  --s-text-disabled: #9aa0a8;
+  --s-border: #cdd2d8;
+  --s-accent: #2f8198;
+  --s-accent-hover: #3a92aa;
+  --s-accent-pressed: #266b7e;
+  --s-on-accent: #ffffff;
+  --s-focus: #3a92aa;
+  --s-success: #2e8b57;
+  --s-warning: #b5730a;
+  --s-danger: #c0392b;
+  --s-muted: #9aa0a8;
+  --s-success-tint: #e8f3ed;
+  --s-warning-tint: #f6eedf;
+  --s-muted-tint: #f1f2f4;
+
+  /* typography (theme.json typography; desktop pt → popup px, nudged up a step) */
+  --s-font: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+  --s-fs-caption: 11px;
+  --s-fs-body: 12px;
+  --s-fs-h3: 14px;
+  --s-fs-h2: 15px;
+  --s-fw-regular: 400;
+  --s-fw-medium: 600;
+  --s-fw-bold: 700;
+
+  /* spacing / geometry (theme.json geometry) — radius softened for a floating popup */
+  --s-pad-x: 12px;
+  --s-pad-y: 6px;
+  --s-gap: 8px;
+  --s-pad-pop: 16px;
+  --s-ctl-h: 32px;
+  --s-radius: 6px;
+  --s-radius-card: 8px;
+  --s-border-w: 1px;
+  --s-focus-w: 2px;
+
+  --s-dur: 160ms;
+  --s-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --s-window: #1e1f26;
+    --s-surface: #2a2c35;
+    --s-surface-alt: #33353f;
+    --s-text: #e1e1e2;
+    --s-text-muted: #a2a7b0;
+    --s-text-disabled: #6b7079;
+    --s-border: #3e414c;
+    --s-accent: #5fb0c4;
+    --s-accent-hover: #74c0d2;
+    --s-accent-pressed: #4e97a8;
+    --s-on-accent: #10242b;
+    --s-focus: #74c0d2;
+    --s-success: #45bd79;
+    --s-warning: #ffbe65;
+    --s-danger: #ff6b6b;
+    --s-muted: #6b7079;
+    --s-success-tint: #233a30;
+    --s-warning-tint: #3a3220;
+    --s-muted-tint: #33353f;
+  }
+}
+
+:root[data-theme='dark'] {
+  --s-window: #1e1f26;
+  --s-surface: #2a2c35;
+  --s-surface-alt: #33353f;
+  --s-text: #e1e1e2;
+  --s-text-muted: #a2a7b0;
+  --s-text-disabled: #6b7079;
+  --s-border: #3e414c;
+  --s-accent: #5fb0c4;
+  --s-accent-hover: #74c0d2;
+  --s-accent-pressed: #4e97a8;
+  --s-on-accent: #10242b;
+  --s-focus: #74c0d2;
+  --s-success: #45bd79;
+  --s-warning: #ffbe65;
+  --s-danger: #ff6b6b;
+  --s-muted: #6b7079;
+  --s-success-tint: #233a30;
+  --s-warning-tint: #3a3220;
+  --s-muted-tint: #33353f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  width: 320px;
+  font-family: var(--s-font);
+  font-size: var(--s-fs-body);
+  color: var(--s-text);
+  background: var(--s-window);
+  -webkit-font-smoothing: antialiased;
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+.hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-pad-pop);
+  padding-bottom: var(--s-gap);
+}
+
+/* The mark and the name link to the site; they read as a heading, not a link,
+ * until hovered (focus takes the shared :focus-visible ring below). */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+  font-size: var(--s-fs-h3);
+  font-weight: var(--s-fw-bold);
+  letter-spacing: 0.2px;
+  border-radius: var(--s-radius);
+}
+
+.brand:hover {
+  color: var(--s-accent);
+}
+
+.brand .mark {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.toggle {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--s-text-muted);
+  font-size: 16px;
+  border-radius: var(--s-radius);
+  cursor: pointer;
+  transition: color var(--s-dur) var(--s-ease),
+    background var(--s-dur) var(--s-ease);
+}
+
+.toggle:hover {
+  color: var(--s-text);
+  background: var(--s-surface-alt);
+}
+
+/* ── status bar (tinted band per state) ─────────────────────────────────── */
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-gap);
+  margin: 0 var(--s-pad-pop);
+  padding: var(--s-pad-x);
+  border: var(--s-border-w) solid var(--s-border);
+  border-radius: var(--s-radius-card);
+  background: var(--s-surface);
+}
+
+.status[data-state='unlocked'] {
+  background: var(--s-success-tint);
+  border-color: transparent;
+}
+
+.status[data-state='locked'] {
+  background: var(--s-warning-tint);
+  border-color: transparent;
+}
+
+.status[data-state='offline'] {
+  background: var(--s-muted-tint);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+.status[data-state='unlocked'] .dot {
+  background: var(--s-success);
+}
+
+.status[data-state='locked'] .dot {
+  background: var(--s-warning);
+}
+
+/* offline → a hollow ring, so the state is distinguishable without colour */
+.status[data-state='offline'] .dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--s-muted);
+}
+
+.status.checking .dot {
+  opacity: 0.5;
+  animation: s-pulse 1.1s var(--s-ease) infinite;
+}
+
+.status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--s-fs-h3);
+  font-weight: var(--s-fw-medium);
+  line-height: 1.25;
+}
+
+.sublabel {
+  font-size: var(--s-fs-caption);
+  color: var(--s-text-muted);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.btn-retry {
+  flex: 0 0 auto;
+  height: var(--s-ctl-h);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--s-radius);
+  /* accent-pressed as the resting fill keeps the white label at AA body contrast */
+  background: var(--s-accent-pressed);
+  color: var(--s-on-accent);
+  font-family: inherit;
+  font-size: var(--s-fs-body);
+  font-weight: var(--s-fw-medium);
+  cursor: pointer;
+  transition: background var(--s-dur) var(--s-ease);
+}
+
+.btn-retry:hover {
+  background: var(--s-accent);
+}
+
+.btn-retry:active {
+  background: var(--s-accent-pressed);
+}
+
+.btn-retry:disabled {
+  background: var(--s-surface-alt);
+  color: var(--s-text-disabled);
+  cursor: default;
+}
+
+.btn-retry[hidden] {
+  display: none;
+}
+
+/* ── detail rows ────────────────────────────────────────────────────────── */
+.rows {
+  list-style: none;
+  margin: var(--s-gap) 0 0;
+  padding: var(--s-pad-y) var(--s-pad-pop) var(--s-pad-pop);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-gap);
+  min-height: 28px;
+  font-size: var(--s-fs-caption);
+}
+
+.row-key {
+  flex: 0 0 64px;
+  color: var(--s-text-muted);
+}
+
+.row-val {
+  flex: 1 1 auto;
+  color: var(--s-text);
+}
+
+.row-warn {
+  color: var(--s-warning);
+  font-size: var(--s-fs-body);
+}
+
+.row-warn[hidden] {
+  display: none;
+}
+
+.copy,
+.row-link {
+  border: 0;
+  background: transparent;
+  color: var(--s-accent);
+  font-family: inherit;
+  font-size: var(--s-fs-caption);
+  font-weight: var(--s-fw-medium);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--s-radius);
+  text-decoration: none;
+}
+
+.copy:hover,
+.row-link:hover {
+  text-decoration: underline;
+}
+
+.copy.copied {
+  color: var(--s-success);
+}
+
+/* ── focus / motion ─────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: var(--s-focus-w) solid var(--s-focus);
+  outline-offset: 2px;
+  border-radius: var(--s-radius);
+}
+
+@keyframes s-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── transport settings (mode + manual port) ─────────────────────────────── */
+.settings {
+  border-top: 1px solid var(--s-border);
+  padding: var(--s-pad-y) var(--s-pad-pop) var(--s-pad-pop);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-gap);
+}
+.setting {
+  display: flex;
+  align-items: center;
+  gap: var(--s-gap);
+  min-height: 28px;
+  font-size: var(--s-fs-caption);
+}
+.mode-btn {
+  margin-left: auto;
+  border: 1px solid var(--s-border);
+  background: var(--s-surface-alt);
+  color: var(--s-text);
+  font-family: inherit;
+  font-size: var(--s-fs-caption);
+  font-weight: var(--s-fw-medium);
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: var(--s-radius);
+}
+.mode-btn:hover {
+  border-color: var(--s-accent);
+  color: var(--s-accent);
+}
+.port-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--s-ctl-h);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  background: var(--s-surface);
+  color: var(--s-text);
+  font-family: inherit;
+  font-size: var(--s-fs-body);
+  padding: 0 8px;
+}
+.port-input:focus-visible {
+  outline: 2px solid var(--s-focus);
+  outline-offset: 1px;
+}
+.btn-save {
+  border: 0;
+  background: var(--s-accent);
+  color: var(--s-on-accent);
+  font-family: inherit;
+  font-size: var(--s-fs-caption);
+  font-weight: var(--s-fw-medium);
+  cursor: pointer;
+  padding: 0 12px;
+  height: var(--s-ctl-h);
+  border-radius: var(--s-radius);
+}
+.btn-save:hover {
+  background: var(--s-accent-hover);
+}
+.btn-save:active {
+  background: var(--s-accent-pressed);
+}
+.settings-hint {
+  margin: 0;
+  color: var(--s-text-muted);
+  font-size: var(--s-fs-caption);
+  min-height: 14px;
+}
+.setting[hidden] {
+  display: none;
+}
+
+/* ── version-incompatibility banner (update prompt) ──────────────────────── */
+.version-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-gap);
+  margin: var(--s-gap) var(--s-pad-pop) 0;
+  padding: var(--s-pad-y) var(--s-pad-x);
+  border: 1px solid var(--s-danger);
+  border-radius: var(--s-radius);
+  background: var(--s-warning-tint);
+}
+.version-banner[hidden] {
+  display: none;
+}
+.version-banner-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--s-danger);
+  color: #fff;
+  font-size: var(--s-fs-caption);
+  font-weight: var(--s-fw-bold);
+  line-height: 16px;
+  text-align: center;
+}
+.version-banner-label {
+  color: var(--s-text);
+  font-size: var(--s-fs-body);
+  font-weight: var(--s-fw-medium);
+}
+.version-banner-detail {
+  color: var(--s-text-muted);
+  font-size: var(--s-fs-caption);
+}
+
+/* ── another wallet holds this page's provider (a notice, not an error) ──── */
+.holder-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-gap);
+  margin: var(--s-gap) var(--s-pad-pop) 0;
+  padding: var(--s-pad-y) var(--s-pad-x);
+  border: 1px solid var(--s-warning);
+  border-radius: var(--s-radius);
+  background: var(--s-warning-tint);
+}
+.holder-banner[hidden] {
+  display: none;
+}
+.holder-banner-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--s-warning);
+  color: var(--s-window);
+  font-size: var(--s-fs-caption);
+  font-weight: var(--s-fw-bold);
+  line-height: 16px;
+  text-align: center;
+}
+.holder-banner-label {
+  color: var(--s-text);
+  font-size: var(--s-fs-body);
+  font-weight: var(--s-fw-medium);
+}
+.holder-banner-detail {
+  color: var(--s-text-muted);
+  font-size: var(--s-fs-caption);
+}
+
+/* ── pairing page (pairing.html) ────────────────────────────────────────── */
+.pairing {
+  padding-bottom: var(--s-pad-pop);
+}
+.status[data-state='error'] {
+  background: var(--s-warning-tint);
+  border-color: var(--s-danger);
+}
+.status[data-state='error'] .dot {
+  background: var(--s-danger);
+}
+.status[data-state='info'] .dot {
+  background: var(--s-accent);
+}
+.pair-form {
+  display: flex;
+  gap: var(--s-gap);
+  margin: var(--s-gap) var(--s-pad-pop) 0;
+}
+.pair-form[hidden] {
+  display: none;
+}
+.code-input {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pair-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-gap);
+  margin: var(--s-gap) var(--s-pad-pop) 0;
+}
+.pair-actions button[hidden] {
+  display: none;
+}
