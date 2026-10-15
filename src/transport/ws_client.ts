@@ -660,7 +660,7 @@ export class WsClient {
     this.bound = false;
     this.binding = null;
     this.bindWhenUnlocked = false;
-    ws.addEventListener('message', (ev) => this.onMessage(ev));
+    ws.addEventListener('message', (ev) => this.onMessage(ws, ev));
     ws.addEventListener('close', () => this.onClose(ws));
     ws.addEventListener('error', () => this.onClose(ws));
     if (!(this.pairingUnderWay && this.auth)) {
@@ -954,7 +954,7 @@ export class WsClient {
     }
   }
 
-  private onMessage(ev: MessageEvent): void {
+  private onMessage(ws: WebSocket, ev: MessageEvent): void {
     let msg: unknown;
     try {
       msg = JSON.parse(typeof ev.data === 'string' ? ev.data : '');
@@ -976,9 +976,20 @@ export class WsClient {
       // still bounded by its timeout and by onClose.
       return;
     }
-    // An unsolicited event (no rid) — hand it to the SW to route by origin.
+    // An unsolicited event (no rid): handed to the SW to route by origin only
+    // when it came on the live socket once that socket was bound, which with a
+    // pairing key is after the desktop proved it holds it and the sys_resume
+    // went out (bindSocket). The desktop pushes to an
+    // authenticated socket alone; a frame shaped as a push on an unbound socket
+    // (its handshake still under way or answered locked, or the socket left for
+    // a pairing) or on one already replaced comes from whatever holds that port,
+    // and would hand any page an account or a chain it never chose. It is
+    // dropped: a response is still matched by its rid, and before the bind the
+    // only requests in flight are sys frames.
     if (isEvent(msg)) {
-      this.onEvent?.(msg);
+      if (ws === this.ws && this.bound) {
+        this.onEvent?.(msg);
+      }
       return;
     }
     // Neither guard passed. A frame that names a request in flight is that

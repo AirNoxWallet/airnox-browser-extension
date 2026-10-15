@@ -19,6 +19,7 @@ import { OutboundFrame, PortPoster } from '../src/background/post_to_port';
 import { PortRequest, PortResult } from '../src/protocol/bridge';
 import {
   ErrorCode,
+  Event,
   Namespace,
   Response,
   WEB3_PROTOCOL_VERSION,
@@ -843,7 +844,9 @@ const frameOf = (ws: MockWebSocket, method: string) =>
 // the socket opened; returns the socket once it is open.
 async function openWithAuth(
   auth: SocketAuth,
-  method = 'eth_requestAccounts'
+  method = 'eth_requestAccounts',
+  events?: Event[],
+  connectAttempts?: number
 ): Promise<{
   client: WsClient;
   ws: MockWebSocket;
@@ -855,12 +858,14 @@ async function openWithAuth(
     AUTH_IID,
     [AUTH_KAT.port],
     undefined,
-    undefined,
+    events ? (ev) => events.push(ev) : undefined,
     resumeStoreFor(probe),
     auth
   );
   const reqP = client.send(
-    makeRequest(AUTH_IID, 'rid-dapp', 'evm', DAPP, method)
+    makeRequest(AUTH_IID, 'rid-dapp', 'evm', DAPP, method),
+    undefined,
+    connectAttempts
   );
   reqP.catch(() => undefined);
   const ws = await openManualSocket();
@@ -1498,7 +1503,10 @@ test('a pairing key that cannot be read refuses the socket: it is never served a
 
 // A client with `auth` and no resume store whose first frame is a pairing
 // begin; returns the socket the pairing went out on, and the begin's answer.
-async function startPairing(probe: AuthProbe): Promise<{
+async function startPairing(
+  probe: AuthProbe,
+  events?: Event[]
+): Promise<{
   client: WsClient;
   ws: MockWebSocket;
   pairP: Promise<{ response: Response; port: number }>;
@@ -1508,7 +1516,7 @@ async function startPairing(probe: AuthProbe): Promise<{
     AUTH_IID,
     [AUTH_KAT.port],
     undefined,
-    undefined,
+    events ? (ev) => events.push(ev) : undefined,
     undefined,
     authFor(probe)
   );
@@ -1593,7 +1601,14 @@ test('a dApp that asks while the socket’s own bind is in flight begins again n
 test('a handshake that never ended closes its socket', async () => {
   await withMockSocket(async () => {
     const probe = await pairedProbe();
-    const { ws } = await openWithAuth(authFor(probe));
+    // One connect pass: the closed socket fails the connect, and the request
+    // settles here, rather than retrying on its backoff into a later case.
+    const { ws, reqP } = await openWithAuth(
+      authFor(probe),
+      'eth_requestAccounts',
+      undefined,
+      1
+    );
     await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
     ws.emitMessage(
       JSON.stringify({ rid: frameOf(ws, 'sys_auth_begin')?.rid, ok: 'yes' })
@@ -1601,6 +1616,7 @@ test('a handshake that never ended closes its socket', async () => {
     await until(() => ws.readyState === MockWebSocket.CLOSED, 'the close');
     assert.ok(!methods(ws).includes('sys_auth_finish'));
     assert.ok(!methods(ws).includes('sys_resume'));
+    await assert.rejects(reqP);
   });
 });
 
@@ -1975,5 +1991,104 @@ test('with a key, a begin refused with 1103 under an older major: the dApp hears
     assert.equal(resp.error?.code, ErrorCode.VersionIncompatible);
     assert.match(resp.error?.message ?? '', /desktop 2\.2\.1/);
     assert.match(resp.error?.message ?? '', /Update the desktop app/);
+  });
+});
+
+// ── desktop pushes only from the authenticated socket ────────────────────────
+// The desktop pushes events to an authenticated socket alone. A frame shaped as
+// a push on a socket that has not authenticated, or on one already replaced,
+// comes from whatever holds the port, and must reach no page: it would hand a
+// dApp an account, a chain or a logout the person never chose.
+
+const PUSH = JSON.stringify({
+  event: 'accountsChanged',
+  ns: 'evm',
+  origin: DAPP,
+  chain: 'nt:evm:ci:1',
+  data: ['0x00000000000000000000000000000000000000aa'],
+});
+
+test('a push before the socket authenticated reaches no page; the same push once it is bound does', async () => {
+  await withMockSocket(async () => {
+    const probe = await pairedProbe();
+    const events: Event[] = [];
+    const { ws } = await openWithAuth(
+      authFor(probe),
+      'eth_requestAccounts',
+      events
+    );
+    await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
+    ws.emitMessage(PUSH);
+    await flush();
+    assert.equal(events.length, 0, 'a push during the handshake is dropped');
+    await serveHandshake(ws);
+    await until(() => methods(ws).includes('sys_resume'), 'the resume');
+    ws.emitMessage(PUSH);
+    await flush();
+    assert.deepEqual(
+      events.map((e) => e.event),
+      ['accountsChanged'],
+      'a push after the bind is routed'
+    );
+  });
+});
+
+test('a push on a socket whose handshake was answered locked reaches no page', async () => {
+  await withMockSocket(async () => {
+    const probe = await pairedProbe();
+    const events: Event[] = [];
+    const { ws } = await openWithAuth(
+      authFor(probe),
+      'eth_requestAccounts',
+      events
+    );
+    await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
+    ws.emitMessage(
+      authAnswer(frameOf(ws, 'sys_auth_begin')?.rid as string, false, {
+        error: { code: ErrorCode.WalletLocked, message: 'locked' },
+      })
+    );
+    await flush();
+    ws.emitMessage(PUSH);
+    ws.emitMessage(
+      JSON.stringify({ event: 'disconnect', ns: 'evm', origin: DAPP })
+    );
+    await flush();
+    assert.ok(!methods(ws).includes('sys_resume'), 'the socket is unbound');
+    assert.deepEqual(events, []);
+  });
+});
+
+test('a push on a socket already replaced reaches no page; the live one is heard', async () => {
+  await withMockSocket(async () => {
+    const probe = await pairedProbe();
+    const events: Event[] = [];
+    const { client, ws } = await openWithAuth(
+      authFor(probe),
+      'eth_requestAccounts',
+      events
+    );
+    await serveHandshake(ws);
+    await until(() => methods(ws).includes('sys_resume'), 'the resume');
+    ws.close();
+    const next = await nextSocketAfter(client, ws);
+    await serveHandshake(next);
+    await until(() => methods(next).includes('sys_resume'), 'the resume');
+    ws.emitMessage(PUSH);
+    await flush();
+    assert.equal(events.length, 0, 'the replaced socket is not heard');
+    next.emitMessage(PUSH);
+    await flush();
+    assert.equal(events.length, 1, 'the live bound socket is heard');
+  });
+});
+
+test('a push on the socket left for a pairing reaches no page', async () => {
+  await withMockSocket(async () => {
+    const events: Event[] = [];
+    const { ws } = await startPairing(await pairedProbe(), events);
+    ws.emitMessage(PUSH);
+    await flush();
+    assert.deepEqual(events, []);
   });
 });
