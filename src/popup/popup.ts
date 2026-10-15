@@ -10,10 +10,6 @@ import browser from 'webextension-polyfill';
 import { DEFAULT_WS_PORT } from '../protocol/envelope';
 import { loadAuthKey } from '../transport/auth_key_store';
 import {
-  DISTRUSTED_KEY_RECORD,
-  keyFingerprint,
-} from '../transport/key_fingerprint';
-import {
   getTransportSettings,
   setTransportSettings,
   TransportSettings,
@@ -128,26 +124,16 @@ async function showPageHolders(): Promise<void> {
 
 // Whether this instance holds a pairing key: read from the extension's own
 // IndexedDB (auth_key_store.ts), never from the desktop.
-// A key whose fingerprint the worker filed as distrusted shows as withheld.
 async function showPairing(iid: string): Promise<void> {
   let paired: boolean | undefined;
-  let distrusted = false;
   if (iid) {
     const key = await loadAuthKey(iid).catch(() => null);
     paired = key === null ? undefined : key !== undefined;
-    if (key) {
-      distrusted = await isDistrusted(key).catch(() => false);
-    }
   }
-  const row = pairingRow(paired, distrusted);
+  const row = pairingRow(paired);
   el('pairState').textContent = row.value;
   el('pairState').title = row.detail;
   el('pairOpen').textContent = row.action;
-}
-
-async function isDistrusted(key: CryptoKey): Promise<boolean> {
-  const got = await browser.storage.local.get(DISTRUSTED_KEY_RECORD);
-  return got[DISTRUSTED_KEY_RECORD] === (await keyFingerprint(key));
 }
 
 // The pairing page opens in its own small window, never in a tab beside the

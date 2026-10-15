@@ -98,17 +98,6 @@ test('the popup’s pairing row: unknown, not paired, paired', () => {
   });
 });
 
-test('the popup’s pairing row for a withheld key says so, and where to reset it', () => {
-  const row = pairingRow(true, true);
-  assert.equal(row.value, 'Key withheld');
-  assert.equal(row.action, 'Pair again');
-  assert.match(row.detail, /could not prove it is AirNox Wallet/);
-  assert.match(row.detail, /Reset .*pairing key in AirNox Wallet's Settings/);
-  // Only a held key can be withheld.
-  assert.equal(pairingRow(false, true).value, 'Not paired');
-  assert.equal(pairingRow(undefined, true).value, '—');
-});
-
 test('the page opens waiting for the person: Pair asks the desktop for a code, nothing before it', () => {
   const ready = derivePairingView({
     kind: 'ready',
