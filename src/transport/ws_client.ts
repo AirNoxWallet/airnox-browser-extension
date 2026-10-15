@@ -184,11 +184,15 @@ const handshakeFailureMessage = (failure: HandshakeFailure): string => {
 };
 
 // A desktop proof that did not verify. The key is not withheld afterwards: the
-// next socket offers it again, since a program on the port learns nothing from
-// a handshake (the desktop's proof is checked before anything of ours goes),
-// and the same failure comes from a desktop with another profile open, whose
-// pairing for this browser holds another key. Withholding the key would make
-// either case cost a new pairing.
+// next socket offers it again. A program on the port gets nothing keyed by the
+// pairing key from a handshake (the desktop's proof is checked before our own
+// proof, the resume or any dApp frame goes out). What it does see is the begin
+// itself: its nonce and, for a begin a dApp's request drives, that dApp's
+// origin, once per connect while it holds the port. That disclosure is
+// accepted: a locked desktop needs the origin before it can prove itself, so
+// the begin carries it unproven. The same failure also comes from a desktop
+// with another profile open, whose pairing for this browser holds another key;
+// withholding the key would make either case cost a new pairing.
 export const INTERCEPTION_MESSAGE =
   "the program on the AirNox Wallet desktop app's port could not prove it holds this browser's pairing key. If AirNox Wallet is running, it may have another profile open, one this browser was not paired with: open the profile this browser was paired with, or pair again by code from the Pairing row of the AirNox extension's popup. Otherwise another program may be listening there; nothing of this browser's pairing was sent to it.";
 
