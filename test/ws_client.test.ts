@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
-  PAIRING_KEY_DISTRUSTED_MESSAGE,
+  INTERCEPTION_MESSAGE,
   PAIRING_NEEDED_MESSAGE,
   SocketAuth,
   WsClient,
@@ -12,7 +12,6 @@ import {
   opensPairing,
 } from '../src/transport/ws_client';
 import { importAuthKey } from '../src/transport/auth_handshake';
-import { keyFingerprint } from '../src/transport/key_fingerprint';
 import { PairingPromptGate } from '../src/background/pairing_prompt';
 import { BackgroundRouter } from '../src/background/background_router';
 import { OutboundFrame, PortPoster } from '../src/background/post_to_port';
@@ -952,19 +951,10 @@ test('a desktop proof that does not verify: no proof of ours, nothing bound, the
   });
 });
 
-test('after a desktop proof that did not verify the key is not tried again: no handshake, and the dApp is sent to reset the pairing key in Settings', async () => {
+test('after a desktop proof that did not verify the key is offered again on the next socket, whose desktop must still prove itself first', async () => {
   await withMockSocket(async () => {
     const probe = await pairedProbe();
-    const marks: string[] = [];
-    const auth: SocketAuth = {
-      ...authFor(probe),
-      keyDistrusted: () => Promise.resolve(false),
-      distrustKey: (fingerprint) => {
-        marks.push(fingerprint);
-        return Promise.resolve();
-      },
-    };
-    const { client, ws, reqP } = await openWithAuth(auth);
+    const { client, ws, reqP } = await openWithAuth(authFor(probe));
     await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
     const forged = hexBytes(AUTH_KAT.server_mac);
     forged[0] ^= 0x80;
@@ -978,93 +968,29 @@ test('after a desktop proof that did not verify the key is not tried again: no h
     );
     const first = await reqP;
     assert.equal(first.error?.code, ErrorCode.Disconnected);
-    assert.match(first.error?.message ?? '', /reset .*pairing key.* Settings/);
-    // Filed under the key's fingerprint, never the key or the instance.
-    assert.deepEqual(marks, [await keyFingerprint(probe.key as CryptoKey)]);
-    // The next request opens a new socket and begins nothing on it.
-    const again = client.send(
-      makeRequest(AUTH_IID, 'rid-again', 'evm', DAPP, 'eth_requestAccounts')
-    );
+    assert.equal(first.error?.message, INTERCEPTION_MESSAGE);
+    // The person is told the desktop may have another profile open, and how
+    // to pair again; the key is not withheld, so nothing needs resetting.
+    assert.match(first.error?.message ?? '', /another profile open/);
+    assert.match(first.error?.message ?? '', /pair again by code/);
+    assert.doesNotMatch(first.error?.message ?? '', /Settings/);
+    assert.deepEqual(methods(ws), ['sys_auth_begin']);
+    // The next socket begins a handshake with the same key. Our proof, the
+    // resume and the dApp frame go out only once the desktop's proof verifies.
+    const next = await nextSocketAfter(client, ws);
+    await until(() => methods(next).includes('sys_auth_begin'), 'a new begin');
     await flush();
-    if (isProbe(lastSocket())) {
-      serveProbe(lastSocket());
-      await flush();
-    }
-    const next = lastSocket();
-    assert.notEqual(next, ws);
-    assert.ok(!isProbe(next));
-    next.emitOpen();
-    const resp = await again;
-    assert.equal(resp.error?.code, ErrorCode.Disconnected);
-    assert.equal(resp.error?.message, PAIRING_KEY_DISTRUSTED_MESSAGE);
     assert.deepEqual(
       methods(next).filter((m) => m !== 'sys_ping'),
-      []
+      ['sys_auth_begin']
+    );
+    await serveHandshake(next);
+    await until(() => methods(next).includes('eth_requestAccounts'), 'dApp');
+    assert.deepEqual(
+      methods(next).filter((m) => m !== 'sys_ping'),
+      ['sys_auth_begin', 'sys_auth_finish', 'sys_resume', 'eth_requestAccounts']
     );
     assert.deepEqual(probe.needed, []);
-    // A pairing by code stores a new key, which no record names: the same
-    // socket offers it to a handshake. Nothing is written to lift the record.
-    probe.key = await importAuthKey(new Uint8Array(32).fill(7));
-    client.afterPairing();
-    await until(() => methods(next).includes('sys_auth_begin'), 'the begin');
-    assert.equal(marks.length, 1);
-  });
-});
-
-test('a key that failed a proof stays withheld when the same secret is read back as a new key object', async () => {
-  await withMockSocket(async () => {
-    const probe = await pairedProbe();
-    const auth: SocketAuth = {
-      ...authFor(probe),
-      keyDistrusted: () => Promise.resolve(false),
-      distrustKey: () => Promise.resolve(),
-    };
-    const { client, ws, reqP } = await openWithAuth(auth);
-    await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
-    const forged = hexBytes(AUTH_KAT.server_mac);
-    forged[0] ^= 0x80;
-    ws.emitMessage(
-      authAnswer(frameOf(ws, 'sys_auth_begin')?.rid as string, true, {
-        result: {
-          ns: hexB64(AUTH_KAT.server_nonce),
-          mac: Buffer.from(forged).toString('base64'),
-        },
-      })
-    );
-    await reqP;
-    // IndexedDB hands back a new CryptoKey object on every read.
-    probe.key = (await pairedProbe()).key;
-    const again = client.send(
-      makeRequest(AUTH_IID, 'rid-again', 'evm', DAPP, 'eth_requestAccounts')
-    );
-    await flush();
-    if (isProbe(lastSocket())) {
-      serveProbe(lastSocket());
-      await flush();
-    }
-    lastSocket().emitOpen();
-    const resp = await again;
-    assert.equal(resp.error?.message, PAIRING_KEY_DISTRUSTED_MESSAGE);
-    assert.ok(!methods(lastSocket()).includes('sys_auth_begin'));
-  });
-});
-
-test('a key distrusted before this worker started is not tried either', async () => {
-  await withMockSocket(async () => {
-    const probe = await pairedProbe();
-    const fingerprint = await keyFingerprint(probe.key as CryptoKey);
-    const { ws, reqP } = await openWithAuth({
-      ...authFor(probe),
-      keyDistrusted: (fp) => Promise.resolve(fp === fingerprint),
-      distrustKey: () => Promise.resolve(),
-    });
-    const resp = await reqP;
-    assert.equal(resp.error?.code, ErrorCode.Disconnected);
-    assert.equal(resp.error?.message, PAIRING_KEY_DISTRUSTED_MESSAGE);
-    assert.deepEqual(
-      methods(ws).filter((m) => m !== 'sys_ping'),
-      []
-    );
   });
 });
 
@@ -1689,24 +1615,12 @@ test('a handshake begin that names a dApp keeps the worker awake through the unl
   assert.equal(keepsWorkerAwake(frame('sys_auth_finish', { mac: 'x' })), false);
 });
 
-// ── which failures withhold the key ──────────────────────────────────────────
-// Only a desktop proof that does not verify withholds the key. A desktop that
-// refused our proof, or answered with something malformed, proved nothing
-// either way: the key is offered again on the next socket.
+// ── no failure withholds the key ─────────────────────────────────────────────
+// A desktop that refused our proof, or answered with something malformed,
+// proved nothing either way: the key is offered again on the next socket, as it
+// is after a desktop proof that did not verify.
 
-// A client with `auth` whose distrust records land in `marks`; the next dApp
-// request after the first failed opens a new socket, returned with its reply.
-function markingAuth(probe: AuthProbe, marks: string[]): SocketAuth {
-  return {
-    ...authFor(probe),
-    keyDistrusted: () => Promise.resolve(false),
-    distrustKey: (fingerprint) => {
-      marks.push(fingerprint);
-      return Promise.resolve();
-    },
-  };
-}
-
+// The next dApp request after the first failed opens a new socket.
 async function nextSocketAfter(
   client: WsClient,
   ws: MockWebSocket
@@ -1729,8 +1643,7 @@ async function nextSocketAfter(
 test('a desktop that refuses our proof does not withhold the key: the next socket offers it again', async () => {
   await withMockSocket(async () => {
     const probe = await pairedProbe();
-    const marks: string[] = [];
-    const { client, ws, reqP } = await openWithAuth(markingAuth(probe, marks));
+    const { client, ws, reqP } = await openWithAuth(authFor(probe));
     await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
     ws.emitMessage(
       authAnswer(frameOf(ws, 'sys_auth_begin')?.rid as string, true, {
@@ -1752,7 +1665,6 @@ test('a desktop that refuses our proof does not withhold the key: the next socke
     const resp = await reqP;
     assert.equal(resp.error?.code, ErrorCode.Disconnected);
     assert.match(resp.error?.message ?? '', /did not accept/);
-    assert.deepEqual(marks, []);
     const next = await nextSocketAfter(client, ws);
     await until(() => methods(next).includes('sys_auth_begin'), 'a new begin');
   });
@@ -1761,8 +1673,7 @@ test('a desktop that refuses our proof does not withhold the key: the next socke
 test('a malformed handshake answer does not withhold the key: the next socket offers it again', async () => {
   await withMockSocket(async () => {
     const probe = await pairedProbe();
-    const marks: string[] = [];
-    const { client, ws, reqP } = await openWithAuth(markingAuth(probe, marks));
+    const { client, ws, reqP } = await openWithAuth(authFor(probe));
     await until(() => methods(ws).includes('sys_auth_begin'), 'the begin');
     ws.emitMessage(
       authAnswer(frameOf(ws, 'sys_auth_begin')?.rid as string, true, {
@@ -1772,25 +1683,9 @@ test('a malformed handshake answer does not withhold the key: the next socket of
     const resp = await reqP;
     assert.equal(resp.error?.code, ErrorCode.Disconnected);
     assert.match(resp.error?.message ?? '', /something unexpected/);
-    assert.deepEqual(marks, []);
     assert.ok(!methods(ws).includes('sys_auth_finish'));
     const next = await nextSocketAfter(client, ws);
     await until(() => methods(next).includes('sys_auth_begin'), 'a new begin');
-  });
-});
-
-test('a distrust record that cannot be read counts as none: the handshake runs and still checks the desktop first', async () => {
-  await withMockSocket(async () => {
-    const probe = await pairedProbe();
-    const { ws, reqP } = await openWithAuth({
-      ...authFor(probe),
-      keyDistrusted: () => Promise.reject(new Error('storage failed')),
-      distrustKey: () => Promise.resolve(),
-    });
-    await serveHandshake(ws);
-    await until(() => methods(ws).includes('eth_requestAccounts'), 'dApp');
-    ws.emitMessage(authAnswer('rid-dapp', true, { result: ['0x1'] }));
-    assert.equal((await reqP).ok, true);
   });
 });
 

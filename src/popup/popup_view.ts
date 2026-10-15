@@ -190,13 +190,8 @@ export function themeToggleLabel(choice: ThemeChoice): {
 }
 
 // The popup's Pairing row: whether this instance holds a pairing key, and the
-// action that opens the pairing page. `paired` is undefined while unknown;
-// `distrusted`: the key failed a desktop's proof and is no longer offered, so
-// the person is told what to do rather than shown "Paired".
-export function pairingRow(
-  paired: boolean | undefined,
-  distrusted = false
-): {
+// action that opens the pairing page. `paired` is undefined while unknown.
+export function pairingRow(paired: boolean | undefined): {
   value: string;
   action: string;
   detail: string;
@@ -207,12 +202,5 @@ export function pairingRow(
   if (!paired) {
     return { value: 'Not paired', action: 'Pair', detail: '' };
   }
-  return distrusted
-    ? {
-        value: 'Key withheld',
-        action: 'Pair again',
-        detail:
-          "A program on the desktop app's port could not prove it is AirNox Wallet, so this browser's pairing key is no longer offered. Reset this browser's pairing key in AirNox Wallet's Settings, then pair again.",
-      }
-    : { value: 'Paired', action: 'Pair again', detail: '' };
+  return { value: 'Paired', action: 'Pair again', detail: '' };
 }

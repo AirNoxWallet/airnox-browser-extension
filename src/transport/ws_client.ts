@@ -60,7 +60,6 @@ import {
   HandshakeOutcome,
   authenticate,
 } from './socket_auth';
-import { keyFingerprint } from './key_fingerprint';
 import { SwKeepalive } from './sw_keepalive';
 
 // A confirm-bearing method (connect / sign / tx) blocks on the desktop until the
@@ -159,15 +158,6 @@ export type SocketAuth = {
   required?: boolean;
   // Injected by the tests; random otherwise.
   nonce?: () => Uint8Array;
-  // Whether the key with this fingerprint (key_fingerprint.ts) is distrusted: a
-  // program on the desktop's port could not prove it holds it. Such a key is
-  // never offered to a handshake again; a pairing by code stores a new key,
-  // whose fingerprint no record names. Kept where it outlives a browser
-  // restart and an update of the extension; a failed read counts as not
-  // distrusted (the handshake still verifies the desktop before anything of
-  // ours is sent).
-  keyDistrusted?: (fingerprint: string) => Promise<boolean>;
-  distrustKey?: (fingerprint: string) => Promise<void>;
 };
 
 // A socket that failed its handshake: closed, nothing bound, and the connect is
@@ -185,7 +175,7 @@ export class HandshakeFailureError extends Error {
 const handshakeFailureMessage = (failure: HandshakeFailure): string => {
   switch (failure) {
     case 'interception':
-      return `the program on the AirNox Wallet desktop app's port could not prove it is the paired desktop app; another program may be listening there. ${RESET_PAIRING_ADVICE}`;
+      return INTERCEPTION_MESSAGE;
     case 'proof-refused':
       return "the AirNox Wallet desktop app did not accept this browser's pairing; pair again from the extension's popup";
     case 'bad-answer':
@@ -193,11 +183,14 @@ const handshakeFailureMessage = (failure: HandshakeFailure): string => {
   }
 };
 
-const RESET_PAIRING_ADVICE =
-  "If AirNox Wallet is running, reset this browser's pairing key in its Settings, then pair again by code from the Pairing row of the AirNox extension's popup.";
-
-// What a dApp hears while this browser's key is distrusted.
-export const PAIRING_KEY_DISTRUSTED_MESSAGE = `AirNox will not offer this browser's pairing key again: the program on the desktop app's port could not prove it is the paired AirNox Wallet. ${RESET_PAIRING_ADVICE}`;
+// A desktop proof that did not verify. The key is not withheld afterwards: the
+// next socket offers it again, since a program on the port learns nothing from
+// a handshake (the desktop's proof is checked before anything of ours goes),
+// and the same failure comes from a desktop with another profile open, whose
+// pairing for this browser holds another key. Withholding the key would make
+// either case cost a new pairing.
+export const INTERCEPTION_MESSAGE =
+  "the program on the AirNox Wallet desktop app's port could not prove it holds this browser's pairing key. If AirNox Wallet is running, it may have another profile open, one this browser was not paired with: open the profile this browser was paired with, or pair again by code from the Pairing row of the AirNox extension's popup. Otherwise another program may be listening there; nothing of this browser's pairing was sent to it.";
 
 export const PAIRING_KEY_UNREADABLE_MESSAGE =
   "AirNox could not read this browser's pairing key; try again, or pair again from the Pairing row of the AirNox extension's popup.";
@@ -278,9 +271,6 @@ export class WsClient {
   // and by pairingEnded (the pairing window closed); a dApp frame still binds
   // the socket it goes out on.
   private pairingUnderWay = false;
-  // The fingerprint of the pairing key that failed a desktop's proof (see
-  // SocketAuth.keyDistrusted), or null. A key a new pairing stores has another.
-  private distrustedKey: string | null = null;
   // The protocol version the desktop last reported (the discovery probe, then
   // every sys_ping), or null before the first.
   private desktopVersion: ProtocolVersion | null = null;
@@ -792,27 +782,6 @@ export class WsClient {
       await this.resume(ws);
       return { origin };
     }
-    // A key whose fingerprint cannot be taken cannot be named in a record:
-    // the handshake still verifies the desktop before anything of ours goes.
-    const fingerprint = await keyFingerprint(key).catch(() => undefined);
-    if (
-      fingerprint !== undefined &&
-      fingerprint !== this.distrustedKey &&
-      (await (
-        auth.keyDistrusted?.(fingerprint) ?? Promise.resolve(false)
-      ).catch(() => false))
-    ) {
-      this.distrustedKey = fingerprint;
-    }
-    if (fingerprint !== undefined && fingerprint === this.distrustedKey) {
-      return {
-        origin,
-        refused: {
-          code: ErrorCode.Disconnected,
-          message: PAIRING_KEY_DISTRUSTED_MESSAGE,
-        },
-      };
-    }
     let outcome: HandshakeOutcome;
     // The version the desktop's last handshake answer carried: a refusal for
     // another major names the side to update by it.
@@ -843,15 +812,6 @@ export class WsClient {
       throw e;
     }
     if (outcome.kind === 'failed') {
-      if (outcome.failure === 'interception') {
-        // Never offered again: the next socket would hand the same program
-        // another chance to probe it. Filed under this key's fingerprint, so a
-        // key a pairing stored meanwhile is not the one distrusted.
-        if (fingerprint !== undefined) {
-          this.distrustedKey = fingerprint;
-          void auth.distrustKey?.(fingerprint).catch(() => undefined);
-        }
-      }
       ws.close();
       throw new HandshakeFailureError(
         outcome.failure,

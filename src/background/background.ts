@@ -39,7 +39,6 @@ import {
   nextPingPeriodMinutes,
 } from '../transport/heartbeat_schedule';
 import { loadAuthKey } from '../transport/auth_key_store';
-import { DISTRUSTED_KEY_RECORD } from '../transport/key_fingerprint';
 import { getInstanceId } from '../transport/iid';
 import { candidatePorts, getTransportSettings } from '../transport/settings';
 import { singleFlight } from '../transport/single_flight';
@@ -227,20 +226,8 @@ let pairingOrigin: string | undefined;
 // The dApp the open window names.
 let pairingWindowOrigin: string | undefined;
 
-// The fingerprint of the pairing key a desktop's proof failed
-// (key_fingerprint.ts; never the key): storage.local, so neither a restarted
-// worker, nor a browser restart, nor an update of the extension offers the key
-// again. Only a completed pairing removes it; the key it stores has another
-// fingerprint anyway.
 const socketAuth: SocketAuth = {
   loadKey: loadAuthKey,
-  keyDistrusted: async (fingerprint) => {
-    const got = await browser.storage.local.get(DISTRUSTED_KEY_RECORD);
-    return got[DISTRUSTED_KEY_RECORD] === fingerprint;
-  },
-  distrustKey: async (fingerprint) => {
-    await browser.storage.local.set({ [DISTRUSTED_KEY_RECORD]: fingerprint });
-  },
   pairingNeeded: (origin) => {
     void promptGate.admit(origin).then((admitted) => {
       if (!admitted) {
@@ -450,14 +437,10 @@ browser.runtime.onMessage.addListener(
       );
     }
     if (type === PAIRED_MESSAGE) {
-      // The pairing page stored a new key: the socket authenticates with it.
-      // The distrust of the old key goes with it, also when no client is up
-      // (a worker evicted during the pairing), and every dApp's connect may
-      // open the pairing window again should the desktop drop this pairing.
+      // The pairing page stored a new key: the socket authenticates with it,
+      // and every dApp's connect may open the pairing window again should the
+      // desktop drop this pairing.
       pairingWindowPaired = true;
-      void browser.storage.local
-        .remove(DISTRUSTED_KEY_RECORD)
-        .catch(() => undefined);
       void promptGate.cleared();
       client?.afterPairing();
       return heartbeat(true);

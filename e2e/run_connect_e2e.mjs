@@ -66,9 +66,8 @@
 //      pairing page naming it, and its requests are refused until the person
 //      pairs again; a page the person closed unpaired holds back the dApp's
 //      next connects; a program that answers the handshake without the secret
-//      never receives the extension's proof, nothing binds, and the key is not
-//      offered again until the person resets it in the desktop's Settings and
-//      pairs again; a locked wallet (a lock closes every socket) refuses the
+//      never receives the extension's proof and nothing binds, and once the
+//      real desktop is back the same key authenticates; a locked wallet (a lock closes every socket) refuses the
 //      socket's own handshake and lets the dApp's through once unlocked, also
 //      when a heartbeat sys_ping went out on the socket in between (a ping
 //      binds nothing).
@@ -564,9 +563,10 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
       await fromPopup.close();
       const signAfterDecline = await sign();
 
-      // 4. Something that answers the handshake without the secret: the key
-      // is not offered again, even to the real desktop, until the person
-      // resets the pairing in the desktop's Settings and pairs again.
+      // 4. Something that answers the handshake without the secret gets no
+      // proof of ours and binds nothing. The key is not withheld: once the
+      // real desktop is back on the port, the same key authenticates. A
+      // pairing by code afterwards still works.
       desktop.setImposter(true);
       desktop.dropSockets();
       await sleep(300);
@@ -575,8 +575,8 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
       const imposterSockets = ownSockets(desktop, imposterFrom);
       desktop.setImposter(false);
       const afterImposterFrom = desktop.socketLogs.length;
-      const signDistrusted = await sign();
-      const distrustedSockets = ownSockets(desktop, afterImposterFrom);
+      const signImposterGone = await sign();
+      const imposterGoneSockets = ownSockets(desktop, afterImposterFrom);
       desktop.resetPairing();
       const codesBeforeReset = desktop.shownCodes.length;
       const resetPage = await context.newPage();
@@ -649,8 +649,8 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
         resetSockets,
         signImposter,
         imposterSockets,
-        signDistrusted,
-        distrustedSockets,
+        signImposterGone,
+        imposterGoneSockets,
         signAfterImposter,
         signLocked,
         lockedSockets,
@@ -800,7 +800,7 @@ function assertPaired(r, failures) {
     'an impostor never gets our proof, nothing binds, and the dApp hears a disconnect',
     r.signImposter?.error === 4900 &&
       /could not prove/.test(r.signImposter?.message ?? '') &&
-      /Settings/.test(r.signImposter?.message ?? '') &&
+      /another profile open/.test(r.signImposter?.message ?? '') &&
       r.imposterSockets.length >= 1 &&
       r.imposterSockets.every(
         (s) => json(s.methods) === json(['sys_auth_begin'])
@@ -809,15 +809,21 @@ function assertPaired(r, failures) {
   );
   check(
     failures,
-    'the distrusted key is not offered again: no handshake begins, the dApp is sent to Settings',
-    r.signDistrusted?.error === 4900 &&
-      /Settings/.test(r.signDistrusted?.message ?? '') &&
-      r.distrustedSockets.every((s) => !s.methods.includes('sys_auth_begin')),
-    json({ sign: r.signDistrusted, sockets: r.distrustedSockets })
+    'the impostor gone, the same key authenticates with the real desktop and the sign is served',
+    r.signImposterGone === r.signature &&
+      signer(r.imposterGoneSockets).length >= 1 &&
+      signer(r.imposterGoneSockets).every(
+        (s) =>
+          s.methods
+            .slice(s.methods.indexOf('sys_resume') - 2)
+            .slice(0, 3)
+            .join() === HANDSHAKE.join()
+      ),
+    json({ sign: r.signImposterGone, sockets: r.imposterGoneSockets })
   );
   check(
     failures,
-    'reset in Settings and paired again, the sign is served',
+    'paired again by code after the impostor, the sign is served',
     r.signAfterImposter === r.signature,
     json(r.signAfterImposter)
   );
