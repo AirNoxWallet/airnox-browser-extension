@@ -220,6 +220,16 @@ test('a pushed disconnect forgets the account and emits accountsChanged([]) once
   // A second push finds nothing to forget.
   t.fire('disconnect', {});
   assert.deepEqual(seen, [[]]);
+
+  // The dApp may connect again, and hears `connect` again.
+  const connects: unknown[] = [];
+  p.on('connect', (arg) => connects.push(arg));
+  t.result = [ADDR_B58];
+  await p.request({ method: 'tron_requestAccounts' });
+  assert.equal(p.connectedAddress, ADDR_B58);
+  assert.equal(p.ready, true);
+  assert.deepEqual(connects, [{ address: ADDR_B58 }]);
+  assert.deepEqual(seen, [[], [ADDR_B58]]);
 });
 
 test('a pushed disconnect for another TRON chain or namespace is ignored', async () => {
