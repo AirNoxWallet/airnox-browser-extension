@@ -68,8 +68,9 @@ export class AirNoxTronProvider extends Emitter {
 
   constructor(private readonly transport: Transport) {
     super();
-    // Desktop pushes (accountsChanged on an eligibility change) update the cached
-    // account so `defaultAddress` stays correct after connect.
+    // Desktop pushes (accountsChanged on an eligibility change, disconnect on a
+    // revoke) update the cached account so `defaultAddress` stays correct after
+    // connect.
     this.transport.onEvent((ns, event, data, chain) =>
       this.handleEvent(ns, event, data, chain)
     );
@@ -242,10 +243,10 @@ export class AirNoxTronProvider extends Emitter {
 
   // A desktop accountsChanged push: update the cached account (so defaultAddress
   // stays correct) and re-emit, deduped — a no-op push must not surface a
-  // spurious event. The shim serves TRON mainnet only (roundTrip), so a push
-  // tagged with another TRON chain is about a grant it does not hold. An empty
-  // or missing chain (a push not tied to one, a pre-chain desktop) is not a
-  // mismatch.
+  // spurious event. A `disconnect` push forgets the account. The shim serves
+  // TRON mainnet only (roundTrip), so a push tagged with another TRON chain is
+  // about a grant it does not hold. An empty or missing chain (a push not tied
+  // to one, a pre-chain desktop) is not a mismatch.
   private handleEvent(
     ns: Namespace,
     event: string,
@@ -256,6 +257,13 @@ export class AirNoxTronProvider extends Emitter {
       return; // a push for another chain's provider on the shared window
     }
     if (chain && chain !== TRON_MAINNET_CHAIN_URN) {
+      return;
+    }
+    if (event === 'disconnect') {
+      // The desktop pushes `disconnect` (no body) instead of an empty
+      // accountsChanged when it revokes this browser's last grant for the origin
+      // on this chain: forget the account, as an empty push would.
+      this.forgetAccount();
       return;
     }
     if (event !== 'accountsChanged') {

@@ -361,6 +361,96 @@ test('after a pushed chainChanged, accountsChanged pushes follow the new chain',
   assert.deepEqual(changes, [[A2]]);
 });
 
+// The desktop pushes `disconnect` (no body) when it revokes this browser's last
+// grant for the origin on a chain — its word for a grant set left empty. The
+// dApp hears accountsChanged([]); EIP-1193 `disconnect` stays for a provider
+// that cannot reach the wallet, and this one still can.
+test('a pushed disconnect clears the accounts and emits accountsChanged([]) once', async () => {
+  const t = new MockTransport();
+  t.result = [A1];
+  const p = new AirNoxEvmProvider(t);
+  await p.request({ method: 'eth_requestAccounts' });
+
+  const changes: unknown[] = [];
+  let disconnects = 0;
+  p.on('accountsChanged', (a) => changes.push(a));
+  p.on('disconnect', () => disconnects++);
+  t.fire('disconnect', {}, EVM_MAINNET_CHAIN_URN);
+  assert.deepEqual(changes, [[]]);
+  assert.deepEqual(await p.request({ method: 'eth_accounts' }), []);
+  assert.equal(await p.request({ method: 'eth_coinbase' }), null);
+  assert.equal(p.selectedAddress, null);
+  // A second push finds nothing to forget.
+  t.fire('disconnect', {}, EVM_MAINNET_CHAIN_URN);
+  assert.deepEqual(changes, [[]]);
+  assert.equal(
+    disconnects,
+    0,
+    'no EIP-1193 disconnect: the wallet is still reachable'
+  );
+
+  // The dApp may connect again.
+  t.result = [A1];
+  assert.deepEqual(await p.request({ method: 'eth_requestAccounts' }), [A1]);
+  assert.deepEqual(changes, [[], [A1]]);
+});
+
+test('a pushed disconnect before any connect emits nothing', () => {
+  const t = new MockTransport();
+  const p = new AirNoxEvmProvider(t);
+  let events = 0;
+  p.on('accountsChanged', () => events++);
+  p.on('disconnect', () => events++);
+  t.fire('disconnect', {}, EVM_MAINNET_CHAIN_URN);
+  assert.equal(events, 0);
+});
+
+test('a pushed disconnect follows the chain tag as accountsChanged does', async () => {
+  const t = new MockTransport();
+  t.result = [A1];
+  const p = new AirNoxEvmProvider(t);
+  await p.request({ method: 'eth_requestAccounts' });
+
+  const changes: unknown[] = [];
+  p.on('accountsChanged', (a) => changes.push(a));
+  // Another EVM chain's revoke, and another namespace's disconnect sharing the
+  // window (TON Connect, Wallet-Standard, TRON), say nothing about this set.
+  t.fire('disconnect', {}, SEPOLIA_CHAIN_URN);
+  t.fireNs('tonconnect', 'disconnect', {});
+  t.fireNs('wstd', 'disconnect', {});
+  t.fireNs('tron', 'disconnect', {});
+  assert.deepEqual(changes, []);
+  assert.deepEqual(await p.request({ method: 'eth_accounts' }), [A1]);
+
+  // An empty chain (a push not tied to one) is not a mismatch.
+  t.fire('disconnect', {}, '');
+  assert.deepEqual(changes, [[]]);
+  // Nor is a missing one (a pre-chain desktop).
+  t.fire('accountsChanged', [A2]);
+  t.fire('disconnect', {});
+  assert.deepEqual(changes, [[], [A2], []]);
+});
+
+test('after a switch, a disconnect push follows the adopted chain', async () => {
+  const t = new MockTransport();
+  t.result = [A1];
+  const p = new AirNoxEvmProvider(t);
+  await p.request({ method: 'eth_requestAccounts' });
+  t.result = POLYGON_CHAIN_URN;
+  await p.request({
+    method: 'wallet_switchEthereumChain',
+    params: [{ chainId: '0x89' }],
+  });
+
+  const changes: unknown[] = [];
+  p.on('accountsChanged', (a) => changes.push(a));
+  t.fire('disconnect', {}, EVM_MAINNET_CHAIN_URN);
+  assert.deepEqual(changes, []);
+  t.fire('disconnect', {}, POLYGON_CHAIN_URN);
+  assert.deepEqual(changes, [[]]);
+  assert.deepEqual(await p.request({ method: 'eth_accounts' }), []);
+});
+
 test('an unknown pushed event is ignored', () => {
   const t = new MockTransport();
   const p = new AirNoxEvmProvider(t);

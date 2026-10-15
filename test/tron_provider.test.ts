@@ -203,6 +203,50 @@ test('a pushed accountsChanged naming TRON mainnet, or no chain, applies', async
   assert.equal(p.connectedAddress, null);
 });
 
+// The desktop pushes `disconnect` (no body) when it revokes this browser's last
+// grant for the origin on a chain — its word for a grant set left empty.
+test('a pushed disconnect forgets the account and emits accountsChanged([]) once', async () => {
+  const t = new MockTransport();
+  t.result = [ADDR_B58];
+  const p = new AirNoxTronProvider(t);
+  await p.request({ method: 'tron_requestAccounts' });
+
+  const seen: unknown[] = [];
+  p.on('accountsChanged', (arg) => seen.push(arg));
+  t.fire('disconnect', {}, TRON_MAINNET_CHAIN_URN);
+  assert.deepEqual(seen, [[]]);
+  assert.equal(p.connectedAddress, null);
+  assert.equal(p.ready, false);
+  // A second push finds nothing to forget.
+  t.fire('disconnect', {});
+  assert.deepEqual(seen, [[]]);
+
+  // The dApp may connect again, and hears `connect` again.
+  const connects: unknown[] = [];
+  p.on('connect', (arg) => connects.push(arg));
+  t.result = [ADDR_B58];
+  await p.request({ method: 'tron_requestAccounts' });
+  assert.equal(p.connectedAddress, ADDR_B58);
+  assert.equal(p.ready, true);
+  assert.deepEqual(connects, [{ address: ADDR_B58 }]);
+  assert.deepEqual(seen, [[], [ADDR_B58]]);
+});
+
+test('a pushed disconnect for another TRON chain or namespace is ignored', async () => {
+  const t = new MockTransport();
+  t.result = [ADDR_B58];
+  const p = new AirNoxTronProvider(t);
+  await p.request({ method: 'tron_requestAccounts' });
+
+  const seen: unknown[] = [];
+  p.on('accountsChanged', (arg) => seen.push(arg));
+  t.fire('disconnect', {}, SHASTA_CHAIN_URN);
+  t.fireNs('evm', 'disconnect', {});
+  t.fireNs('tonconnect', 'disconnect', {});
+  assert.deepEqual(seen, []);
+  assert.equal(p.connectedAddress, ADDR_B58);
+});
+
 test('a request without a method rejects MalformedRequest', async () => {
   const t = new MockTransport();
   const p = new AirNoxTronProvider(t);
