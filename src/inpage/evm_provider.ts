@@ -101,8 +101,8 @@ export class AirNoxEvmProvider extends Emitter {
     super();
     this.chainUrn = chainUrn;
     this.chainIdHex = chainIdHex;
-    // Unsolicited desktop pushes (accountsChanged / chainChanged) flow in through
-    // the transport.
+    // Unsolicited desktop pushes (accountsChanged / chainChanged / disconnect)
+    // flow in through the transport.
     this.transport.onEvent((ns, event, data, chain) =>
       this.handleEvent(ns, event, data, chain)
     );
@@ -143,9 +143,11 @@ export class AirNoxEvmProvider extends Emitter {
     return this.connectedAccounts[0]?.toLowerCase() ?? null;
   }
 
-  // An event the desktop pushed for this dApp. Both accountsChanged and
-  // chainChanged update the cached state and re-emit, deduped — the desktop only
-  // pushes on a real change, but a no-op push must not surface a spurious event.
+  // An event the desktop pushed for this dApp. accountsChanged and chainChanged
+  // update the cached state and re-emit, deduped — the desktop only pushes on a
+  // real change, but a no-op push must not surface a spurious event. disconnect
+  // is the desktop's word for a grant set left empty (a revoke in its UI), and
+  // reads as an empty accountsChanged.
   private handleEvent(
     ns: Namespace,
     event: string,
@@ -155,7 +157,7 @@ export class AirNoxEvmProvider extends Emitter {
     if (ns !== 'evm') {
       return; // a push for another chain's provider on the shared window
     }
-    if (event === 'accountsChanged') {
+    if (event === 'accountsChanged' || event === 'disconnect') {
       // The desktop tags the push with the chain whose grant changed, and the
       // cached set is the ACTIVE chain's: a push about another EVM chain says
       // nothing about it. A switch's answer is adopted before the push that
@@ -165,6 +167,17 @@ export class AirNoxEvmProvider extends Emitter {
       if (chain && chain !== this.chainUrn) {
         return;
       }
+    }
+    if (event === 'disconnect') {
+      // The desktop pushes `disconnect` (no body) instead of an empty
+      // accountsChanged when it revokes this browser's last grant for the origin
+      // on this chain. The dApp hears it as EIP-1193 accountsChanged([]), not as
+      // EIP-1193 `disconnect`: that event means the provider cannot reach the
+      // wallet at all, and this one still can — the dApp may connect again.
+      this.forgetAccounts();
+      return;
+    }
+    if (event === 'accountsChanged') {
       const accounts = Array.isArray(data)
         ? data.filter((a): a is string => typeof a === 'string')
         : [];
