@@ -16,6 +16,7 @@ function browserWindows() {
     open: new Set<number>(),
     creates: [] as (string | undefined)[],
     focuses: [] as number[],
+    closes: [] as number[],
     failCreate: false,
   };
   const ops = {
@@ -31,6 +32,11 @@ function browserWindows() {
       const id = state.nextId++;
       state.open.add(id);
       return Promise.resolve(id);
+    },
+    close: (id: number) => {
+      state.closes.push(id);
+      state.open.delete(id);
+      return Promise.resolve();
     },
   };
   return { state, ops };
@@ -133,9 +139,37 @@ test('a completed pairing is kept with the window, so its close is no decline', 
   const { ops } = browserWindows();
   const { store } = sessionStore();
   await new PairingWindow(store, ops).open(A);
-  await new PairingWindow(store, ops).paired();
+  await new PairingWindow(store, ops).paired(10);
   const closed = await new PairingWindow(store, ops).removed(10);
   assert.equal(closed?.paired, true);
+});
+
+test('a pairing page in another window marks nothing', async () => {
+  const { ops } = browserWindows();
+  const { store, held } = sessionStore();
+  const win = new PairingWindow(store, ops);
+  await win.open(A);
+  await win.paired(42);
+  await win.paired(undefined);
+  assert.deepEqual(held.value, { id: 10, origin: A, paired: false });
+});
+
+test('a window that paired is closed and a fresh one opens, never brought back', async () => {
+  const { state, ops } = browserWindows();
+  const { store, held } = sessionStore();
+  await new PairingWindow(store, ops).open(A);
+  await new PairingWindow(store, ops).paired(10);
+  // The desktop dropped the pairing; after a worker restart the person
+  // presses Pair in the toolbar.
+  const restarted = new PairingWindow(store, ops);
+  await restarted.open(undefined);
+  assert.deepEqual(state.focuses, []);
+  assert.deepEqual(state.closes, [10]);
+  assert.deepEqual(state.creates, [A, undefined]);
+  assert.deepEqual(held.value, { id: 11, paired: false });
+  // The paired window's close, heard afterwards, is not the new one's.
+  assert.equal(await restarted.removed(10), undefined);
+  assert.deepEqual(held.value, { id: 11, paired: false });
 });
 
 test('a failed create opens nothing and the next open tries again', async () => {

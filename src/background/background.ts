@@ -234,6 +234,7 @@ const pairingWindow = new PairingWindow(
       }
       return created.id;
     },
+    close: (id) => browser.windows.remove(id),
   }
 );
 
@@ -463,7 +464,7 @@ browser.runtime.onMessage.addListener(
       // The pairing page stored a new key: the socket authenticates with it,
       // and every dApp's connect may open the pairing window again should the
       // desktop drop this pairing.
-      void pairingWindow.paired().catch(() => undefined);
+      void pairingWindow.paired(sender.tab?.windowId).catch(() => undefined);
       void promptGate.cleared();
       client?.afterPairing();
       return heartbeat(true);

@@ -142,7 +142,13 @@ async function showPairing(iid: string): Promise<void> {
 function openPairing(): void {
   void browser.runtime
     .sendMessage({ type: OPEN_PAIRING_MESSAGE })
-    .then(() => window.close())
+    .then((opened: unknown) => {
+      // Closed only once the worker says the window is in front; otherwise
+      // the popup stays, and its Pair can be pressed again.
+      if (opened === true) {
+        window.close();
+      }
+    })
     .catch(() => undefined);
 }
 

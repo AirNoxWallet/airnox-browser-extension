@@ -38,6 +38,8 @@ export interface PairingWindowOps {
   focus(id: number): Promise<boolean>;
   // Open the pairing page in a new window, naming `origin`; its id.
   create(origin: string | undefined): Promise<number>;
+  // Close the window; a window already gone is no error.
+  close(id: number): Promise<void>;
 }
 
 // A record read back from storage is untrusted in shape: anything that is not
@@ -71,15 +73,25 @@ export class PairingWindow {
   ) {}
 
   // Focus the open pairing window, or open one naming `origin`. An open
-  // window keeps the dApp it names: the attempt in it is that one's.
+  // window keeps the dApp it names: the attempt in it is that one's. A window
+  // that has paired is never brought back: it shows only that it paired, and
+  // a new open means a new pairing is wanted (the person's Pair again, or a
+  // dApp's connect after the desktop dropped the pairing), so it is closed and
+  // a fresh one opens.
   open(origin: string | undefined): Promise<void> {
     return this.serial(async () => {
       const open = readPairingWindowRecord(await this.store.load());
-      if (open !== undefined && (await this.ops.focus(open.id))) {
-        return;
+      if (open !== undefined) {
+        if (open.paired) {
+          // Its close, heard after this step, matches no record: it is
+          // neither a decline nor the end of an attempt.
+          await this.ops.close(open.id).catch(() => undefined);
+        } else if (await this.ops.focus(open.id)) {
+          return;
+        }
       }
-      // Gone (closed while no worker heard it) or never opened. A create that
-      // fails records nothing, so the next open tries again.
+      // Gone (closed while no worker heard it), paired, or never opened. A
+      // create that fails records nothing, so the next open tries again.
       const id = await this.ops.create(origin);
       await this.store.save(
         origin === undefined
@@ -89,11 +101,14 @@ export class PairingWindow {
     });
   }
 
-  // A pairing completed in the open window: its close is not a decline.
-  paired(): Promise<void> {
+  // A pairing completed in the window `windowId` (the sender's): when that is
+  // the pairing window, its close is not a decline. A pairing page in any other
+  // window (a tab the person opened by its URL) marks nothing: the pairing
+  // window may still hold an attempt of its own.
+  paired(windowId: number | undefined): Promise<void> {
     return this.serial(async () => {
       const open = readPairingWindowRecord(await this.store.load());
-      if (open !== undefined) {
+      if (open !== undefined && open.id === windowId) {
         await this.store.save({ ...open, paired: true });
       }
     });

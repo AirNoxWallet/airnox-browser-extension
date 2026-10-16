@@ -65,7 +65,7 @@ const FAILURES: Record<
   busy: {
     title: 'AirNox Wallet is already showing a prompt',
     detail:
-      'It may be behind this browser window. Finish or cancel it there, then try again.',
+      'It may be behind this browser window. Finish or cancel it in AirNox Wallet, then try again.',
     tone: 'warn',
   },
   cooldown: {

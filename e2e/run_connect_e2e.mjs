@@ -57,16 +57,18 @@
 //      restore (it forgot the binding: a lock) makes the page forget them.
 //  10. PAIRED          → pairing by code and the socket handshake: a browser
 //      with no pairing key is refused (1002); a sign or a polled read opens
-//      nothing, the dApp's connect opens one pairing page naming the dApp (the
-//      toolbar popup's Pair then opens no second one), and the page asks the
-//      desktop for nothing until the person presses Pair;
+//      nothing, the dApp's connect opens one pairing page naming the dApp, and
+//      the page asks the desktop for nothing until the person presses Pair;
 //      the page pairs it on the socket the worker holds, with the code the
 //      desktop shows, and that socket authenticates; every socket
 //      authenticates (begin, finish) before its sys_resume and any dApp frame;
 //      a desktop that reset the pairing makes the dApp's next connect open the
 //      pairing page naming it, and its requests are refused until the person
-//      pairs again; a page the person closed unpaired holds back the dApp's
-//      next connects; a program that answers the handshake without the secret
+//      pairs again; with the worker stopped while that page is open, the
+//      toolbar popup's Pair focuses it and opens no second one; a page the
+//      person closed unpaired holds back the dApp's next connects, also when a
+//      restarted worker hears the close; with no page open, the toolbar's Pair
+//      opens one naming no dApp, and it pairs; a program that answers the handshake without the secret
 //      never receives the extension's proof and nothing binds, and once the
 //      real desktop is back the same key authenticates; a locked wallet (a lock closes every socket) refuses the
 //      socket's own handshake and lets the dApp's through once unlocked, also
@@ -410,6 +412,70 @@ async function pairOnPage(pairing, desktop, codesBefore) {
   );
 }
 
+// Stop the extension's service worker, as an MV3 eviction would, over CDP from
+// a tab on the extension's own origin (it shares the worker's storage
+// partition; a session on a page in a popup-type window hears no worker
+// events). The tab shows manifest.json, which runs no script of ours.
+// `stopped` is true once CDP reports the extension's worker, seen running, as
+// stopped: the browser's own word, since Playwright raises no close for a
+// stopped worker; `seen` is every status it reported.
+async function stopWorker(context, extensionId) {
+  const scope = `chrome-extension://${extensionId}/`;
+  const tab = await context.newPage();
+  await tab.goto(`${scope}manifest.json`);
+  const cdp = await context.newCDPSession(tab);
+  let running = false;
+  const seen = [];
+  const stopped = new Promise((resolve) => {
+    cdp.on('ServiceWorker.workerVersionUpdated', ({ versions }) => {
+      for (const v of versions) {
+        if (!v.scriptURL.startsWith(scope)) {
+          continue;
+        }
+        seen.push(v.runningStatus);
+        if (v.runningStatus === 'running') {
+          running = true;
+        } else if (v.runningStatus === 'stopped' && running) {
+          resolve(true);
+        }
+      }
+    });
+  });
+  await cdp.send('ServiceWorker.enable');
+  await cdp.send('ServiceWorker.stopAllWorkers');
+  const result = await Promise.race([stopped, sleep(5000).then(() => false)]);
+  await cdp.detach();
+  await tab.close();
+  return { stopped: result, seen };
+}
+
+// The toolbar popup's Pair: open the popup page and press its Pairing row's
+// button. The popup closes itself once the worker says the pairing window is in
+// front, so a click the worker never served leaves it open. Then the pairing
+// pages open, and the dApp each names (null: none).
+async function toolbarPair(context, extensionId) {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html`);
+  const closing = popup
+    .waitForEvent('close', { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  await popup.click('#pairOpen');
+  const closed = await closing;
+  if (!closed) {
+    await popup.close();
+  }
+  await sleep(500);
+  const pages = context
+    .pages()
+    .filter((p) => p.url().includes('/src/popup/pairing.html'));
+  return {
+    closed,
+    pages: pages.length,
+    origins: pages.map((p) => new URL(p.url()).searchParams.get('origin')),
+  };
+}
+
 // Pair a fresh browser on the extension's pairing page (the popup's Pairing row
 // opens it), and wait for the socket the pairing ran on to authenticate.
 async function pairBrowser(context, desktop) {
@@ -506,18 +572,6 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
       });
       await sleep(800);
       const pagesAfterConnects = pairingPages();
-      // The toolbar popup's Pair, while the dApp's window is open: the worker
-      // focuses that window, and no second pairing page opens.
-      const toolbar = await context.newPage();
-      await toolbar.goto(
-        `chrome-extension://${extensionId}/src/popup/popup.html`
-      );
-      await toolbar.click('#pairOpen');
-      await sleep(800);
-      const pagesAfterToolbarPair = pairingPages();
-      if (!toolbar.isClosed()) {
-        await toolbar.close();
-      }
       const beginsBeforePress = desktop.pairBegins.length;
       // 2. The page pairs by code on the socket the worker holds, which then
       // authenticates with the key.
@@ -553,27 +607,35 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
       const signRepaired = await sign();
       const resetSockets = ownSockets(desktop, resetFrom);
 
-      // 3b. Reset again: the connect opens the page, the person closes it
-      // without pairing, and the dApp's next connects open nothing (the
-      // cooldown); the person pairs from the popup's Pairing row instead.
+      // 3b. Reset again: the connect opens the page naming the dApp. The
+      // worker is stopped while it is open, as an MV3 eviction would, and the
+      // toolbar popup's Pair then focuses that page (the restarted worker
+      // finds it in storage.session) instead of opening a second one. The
+      // person closes it without pairing, and the dApp's next connects open
+      // nothing (the cooldown, recorded by the restarted worker); with no page
+      // open, the toolbar's Pair opens one naming no dApp, and it pairs.
       desktop.resetPairing();
       desktop.dropSockets();
       await sleep(300);
       const declineOpened = pairingPage();
       await connect();
       const declined = await declineOpened;
+      const workerStopped = await stopWorker(context, extensionId);
+      const toolbarOverDapp = await toolbarPair(context, extensionId);
       await declined.close();
       await sleep(300);
       const connectsAfterDecline = [await connect(), await connect()];
       await sleep(800);
       const pagesAfterDecline = pairingPages();
       const codesBeforeDecline = desktop.shownCodes.length;
-      const fromPopup = await context.newPage();
-      await fromPopup.goto(
-        `chrome-extension://${extensionId}/src/popup/pairing.html`
-      );
-      await pairOnPage(fromPopup, desktop, codesBeforeDecline);
-      await fromPopup.close();
+      const toolbarAlone = await toolbarPair(context, extensionId);
+      const fromPopup = context
+        .pages()
+        .find((p) => p.url().includes('/src/popup/pairing.html'));
+      if (fromPopup !== undefined) {
+        await pairOnPage(fromPopup, desktop, codesBeforeDecline);
+        await fromPopup.close();
+      }
       const signAfterDecline = await sign();
 
       // 4. Something that answers the handshake without the secret gets no
@@ -643,12 +705,14 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
         connectKeyless,
         connectAgain,
         pagesAfterConnects,
-        pagesAfterToolbarPair,
         beginsBeforePress,
         pagesAfterUnpairedSign,
         connectUnpaired,
+        workerStopped,
+        toolbarOverDapp,
         connectsAfterDecline,
         pagesAfterDecline,
+        toolbarAlone,
         signAfterDecline,
         keylessOrigin,
         firstBegin,
@@ -696,11 +760,10 @@ function assertPaired(r, failures) {
   );
   check(
     failures,
-    'without a pairing key the connect is refused with 1002 and opens one pairing page naming it (the toolbar Pair opens no second one), which asks the desktop for nothing until Pair is pressed',
+    'without a pairing key the connect is refused with 1002 and opens one pairing page naming it, which asks the desktop for nothing until Pair is pressed',
     r.connectKeyless?.error === 1002 &&
       r.connectAgain?.error === 1002 &&
       r.pagesAfterConnects === 1 &&
-      r.pagesAfterToolbarPair === 1 &&
       r.beginsBeforePress === 0 &&
       r.keylessOrigin === r.origin &&
       r.firstBegin?.origin === r.origin,
@@ -708,7 +771,6 @@ function assertPaired(r, failures) {
       connect: r.connectKeyless,
       again: r.connectAgain,
       pages: r.pagesAfterConnects,
-      afterToolbarPair: r.pagesAfterToolbarPair,
       beginsBeforePress: r.beginsBeforePress,
       opened: r.keylessOrigin,
       begin: r.firstBegin,
@@ -767,15 +829,28 @@ function assertPaired(r, failures) {
   );
   check(
     failures,
-    'a pairing page closed unpaired holds back the dApp’s next connects; paired from the popup, the sign is served',
+    'with the worker stopped, the toolbar Pair focuses the dApp’s open pairing page and opens no second one',
+    r.workerStopped.stopped === true &&
+      r.toolbarOverDapp.closed === true &&
+      r.toolbarOverDapp.pages === 1 &&
+      r.toolbarOverDapp.origins[0] === r.origin,
+    json({ stopped: r.workerStopped, toolbar: r.toolbarOverDapp })
+  );
+  check(
+    failures,
+    'a pairing page closed unpaired holds back the dApp’s next connects, also after a worker restart',
     r.connectsAfterDecline.every((c) => c?.error === 1002) &&
-      r.pagesAfterDecline === 0 &&
+      r.pagesAfterDecline === 0,
+    json({ connects: r.connectsAfterDecline, pages: r.pagesAfterDecline })
+  );
+  check(
+    failures,
+    'with no pairing page open, the toolbar Pair opens one naming no dApp; paired there, the sign is served',
+    r.toolbarAlone.closed === true &&
+      r.toolbarAlone.pages === 1 &&
+      r.toolbarAlone.origins[0] === null &&
       r.signAfterDecline === r.signature,
-    json({
-      connects: r.connectsAfterDecline,
-      pages: r.pagesAfterDecline,
-      sign: r.signAfterDecline,
-    })
+    json({ toolbar: r.toolbarAlone, sign: r.signAfterDecline })
   );
   check(
     failures,
