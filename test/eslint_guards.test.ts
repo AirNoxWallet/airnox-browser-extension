@@ -145,6 +145,20 @@ const cases: Case[] = [
     null,
   ],
   ['src/popup/p.ts', 'document.title;', null],
+  // The pairing window is the worker's alone (one window at a time): an
+  // extension page asks for it and never opens a window itself.
+  [
+    'src/popup/p.ts',
+    'browser.windows.create({ url: "x" });',
+    'no-restricted-properties',
+  ],
+  [
+    'src/popup/p.ts',
+    'const { windows } = browser; void windows;',
+    'no-restricted-properties',
+  ],
+  ['src/popup/p.ts', 'chrome.windows.create({});', 'no-restricted-properties'],
+  ['src/background/p.ts', 'browser.windows.create({ url: "x" });', null],
   ['src/popup/p.ts', 'declare const e: Element; e.textContent = "x";', null],
   ['src/protocol/p.ts', "import { chainKey } from './chains';", null],
 ];

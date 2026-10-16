@@ -233,10 +233,15 @@ export const PAIR_RELAY_MESSAGE = 'airnox:pair-relay' as const;
 // socket authenticates with it (WsClient.afterPairing).
 export const PAIRED_MESSAGE = 'airnox:paired' as const;
 
+// The toolbar popup's Pair asks the SW for the pairing window. Only the SW opens
+// it, so there is one at a time: an open one is focused, not stacked (a second
+// window's Pair would meet the first attempt still pending on the desktop).
+export const OPEN_PAIRING_MESSAGE = 'airnox:open-pairing' as const;
+
 // The pairing page, in the extension's package, and the window it opens in. The
-// popup's Pairing row opens it, and so does the SW when a dApp's request finds
-// no pairing the desktop accepts; then it carries that dApp's origin, a label
-// hint the page passes on to the desktop's code dialog.
+// SW opens it when the popup's Pairing row asks (OPEN_PAIRING_MESSAGE), and when
+// a dApp's request finds no pairing the desktop accepts; then it carries that
+// dApp's origin, a label hint the page passes on to the desktop's code dialog.
 export const PAIRING_PAGE = 'src/popup/pairing.html';
 export const PAIRING_WINDOW = {
   type: 'popup',

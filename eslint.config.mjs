@@ -30,6 +30,8 @@ const swOnly =
   'src/transport owns the desktop WebSocket and is service-worker-only';
 const noExtensionApi =
   'the main world has no extension API — go through the transport seam';
+const workerWindows =
+  "windows are the service worker's: ask it (OPEN_PAIRING_MESSAGE)";
 const domFree =
   'DOM-free layer — this belongs in src/content, src/inpage or src/popup';
 
@@ -81,6 +83,19 @@ export const guardBlocks = [
         'error',
         ...viaGlobal('browser', noExtensionApi),
         ...viaGlobal('chrome', noExtensionApi),
+      ],
+    },
+  },
+  {
+    // The pairing window is the service worker's alone, so there is one at a
+    // time (src/background/pairing_window.ts): an extension page asks for it
+    // with OPEN_PAIRING_MESSAGE and never opens or moves a window itself.
+    files: ['src/popup/**/*.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        { object: 'browser', property: 'windows', message: workerWindows },
+        { object: 'chrome', property: 'windows', message: workerWindows },
       ],
     },
   },

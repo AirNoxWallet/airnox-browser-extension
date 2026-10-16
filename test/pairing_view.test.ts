@@ -47,6 +47,18 @@ test('a typo keeps the code field and names its cause; nothing went to the deskt
   );
 });
 
+test('a busy desktop says its prompt may be behind the browser, and blames no one', () => {
+  const view = derivePairingView({ kind: 'failed', failure: 'busy' });
+  const text = `${view.title} ${view.detail}`;
+  assert.equal(view.tone, 'warn');
+  assert.match(text, /behind this browser window/);
+  assert.match(text, /finish or cancel it/i);
+  // Not "another pairing is open": the open prompt is often the person's own
+  // first attempt, from this same browser.
+  assert.doesNotMatch(text, /another pairing/i);
+  assert.equal(view.tryAgain, true);
+});
+
 test('the steps: asking, entering, checking, paired', () => {
   const starting = derivePairingView({ kind: 'starting' });
   assert.equal(starting.busy, true);

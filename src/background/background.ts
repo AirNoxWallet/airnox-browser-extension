@@ -18,6 +18,7 @@ import {
 } from '../protocol/envelope';
 import {
   FORGET_ACCOUNTS_MESSAGE,
+  OPEN_PAIRING_MESSAGE,
   PAIRED_MESSAGE,
   PAIRING_WINDOW,
   PAIR_RELAY_MESSAGE,
@@ -34,6 +35,7 @@ import { DesktopSessionWatch } from './desktop_session';
 import { BadgeFace, badgeFace, sameFace } from './badge_state';
 import { Web3Tabs } from './web3_tabs';
 import { PairingPromptGate, readPromptRecord } from './pairing_prompt';
+import { PairingWindow } from './pairing_window';
 import {
   PING_PERIOD_MIN_MINUTES,
   nextPingPeriodMinutes,
@@ -182,14 +184,13 @@ const resumeStore: ResumeStore = {
 // (auth_key_store.ts); the worker only reads it, to authenticate each socket.
 // When a dApp's connect finds no pairing the desktop accepts, the pairing page
 // may open in its own small window, naming the dApp: at most once per origin
-// per cooldown (pairing_prompt.ts), and one window at a time: a connect from
-// another origin focuses the open one instead of stacking another. The page
-// asks the desktop for a code only when the person presses Pair in it.
-let pairingWindowId: number | undefined;
-// A pairing completed since the window opened: its close is not a decline.
-let pairingWindowPaired = false;
-
+// per cooldown (pairing_prompt.ts). The toolbar popup's Pair asks for the same
+// window (OPEN_PAIRING_MESSAGE). Either way there is one window at a time
+// (pairing_window.ts): an open one is focused instead of stacking another, and
+// its record lives in storage.session, so a restarted worker still knows it.
+// The page asks the desktop for a code only when the person presses Pair in it.
 const PAIRING_PROMPTS_KEY = 'airnox.pairingPrompts';
+const PAIRING_WINDOW_KEY = 'airnox.pairingWindow';
 
 const promptGate = new PairingPromptGate({
   load: async () =>
@@ -203,28 +204,39 @@ const promptGate = new PairingPromptGate({
   },
 });
 
-const pairingWindowFlight = singleFlight(async (): Promise<void> => {
-  if (pairingWindowId !== undefined) {
-    const open = await browser.windows
-      .update(pairingWindowId, { focused: true })
-      .then(() => true)
-      .catch(() => false);
-    if (open) {
-      return;
-    }
-    pairingWindowId = undefined;
+const pairingWindow = new PairingWindow(
+  {
+    load: async () =>
+      (await browser.storage.session.get(PAIRING_WINDOW_KEY))[
+        PAIRING_WINDOW_KEY
+      ],
+    save: async (record) => {
+      if (record === undefined) {
+        await browser.storage.session.remove(PAIRING_WINDOW_KEY);
+      } else {
+        await browser.storage.session.set({ [PAIRING_WINDOW_KEY]: record });
+      }
+    },
+  },
+  {
+    focus: (id) =>
+      browser.windows.update(id, { focused: true }).then(
+        () => true,
+        () => false
+      ),
+    create: async (origin) => {
+      const created = await browser.windows.create({
+        url: browser.runtime.getURL(pairingPagePath(origin)),
+        ...PAIRING_WINDOW,
+      });
+      if (created.id === undefined) {
+        throw new Error('the pairing window has no id');
+      }
+      return created.id;
+    },
+    close: (id) => browser.windows.remove(id),
   }
-  const created = await browser.windows.create({
-    url: browser.runtime.getURL(pairingPagePath(pairingOrigin)),
-    ...PAIRING_WINDOW,
-  });
-  pairingWindowId = created.id;
-  pairingWindowOrigin = pairingOrigin;
-  pairingWindowPaired = false;
-});
-let pairingOrigin: string | undefined;
-// The dApp the open window names.
-let pairingWindowOrigin: string | undefined;
+);
 
 const socketAuth: SocketAuth = {
   loadKey: loadAuthKey,
@@ -233,27 +245,27 @@ const socketAuth: SocketAuth = {
       if (!admitted) {
         return;
       }
-      pairingOrigin = origin;
-      return pairingWindowFlight
-        .get()
-        .catch(() => undefined)
-        .finally(() => pairingWindowFlight.reset());
+      return pairingWindow.open(origin).catch(() => undefined);
     });
   },
 };
 
 browser.windows.onRemoved.addListener((windowId) => {
-  if (windowId === pairingWindowId) {
-    pairingWindowId = undefined;
-    if (!pairingWindowPaired && pairingWindowOrigin !== undefined) {
-      // Closed without a pairing: the dApp's next connect opens nothing for a
-      // cooldown from now.
-      void promptGate.declined(pairingWindowOrigin);
-    }
-    pairingWindowOrigin = undefined;
-    // Closed without a pairing (a completed one already told the client).
-    client?.pairingEnded();
-  }
+  void pairingWindow
+    .removed(windowId)
+    .then((closed) => {
+      if (closed === undefined) {
+        return;
+      }
+      if (!closed.paired && closed.origin !== undefined) {
+        // Closed without a pairing: the dApp's next connect opens nothing for
+        // a cooldown from now.
+        void promptGate.declined(closed.origin);
+      }
+      // Closed without a pairing (a completed one already told the client).
+      client?.pairingEnded();
+    })
+    .catch(() => undefined);
 });
 
 async function forgetAccountsInEveryTab(): Promise<void> {
@@ -406,10 +418,12 @@ async function rearmHeartbeat(connected: boolean): Promise<void> {
 // The popup asks for the current connection state (a fresh sys_ping) when it
 // opens and on Retry. It receives ONLY {connected, status, iid, port, version} —
 // never any wallet/account/asset data, which is desktop-only. The pairing page
-// relays its two pairing frames the same way. All three messages are the
-// extension pages' alone: the status reply carries the pairing handle, the relay
-// reaches the desktop socket, and a content script (whose sender URL is its
-// page's) gets no answer to any of them.
+// relays its two pairing frames the same way, and the popup's Pair asks for the
+// pairing window. Every one of these messages is the extension pages' alone: the
+// status reply carries the pairing handle, the relay reaches the desktop socket,
+// a window a web page could raise at will would be the prompt flood the
+// cooldown exists against, and a content script (whose sender URL is its page's)
+// gets no answer to any of them.
 browser.runtime.onMessage.addListener(
   (msg: unknown, sender: Runtime.MessageSender) => {
     const type = (msg as { type?: string } | undefined)?.type;
@@ -417,7 +431,8 @@ browser.runtime.onMessage.addListener(
       type !== SETTINGS_CHANGED_MESSAGE &&
       type !== STATUS_MESSAGE &&
       type !== PAIR_RELAY_MESSAGE &&
-      type !== PAIRED_MESSAGE
+      type !== PAIRED_MESSAGE &&
+      type !== OPEN_PAIRING_MESSAGE
     ) {
       return undefined; // not ours — let other listeners (if any) handle it
     }
@@ -436,11 +451,20 @@ browser.runtime.onMessage.addListener(
         msg
       );
     }
+    if (type === OPEN_PAIRING_MESSAGE) {
+      // The toolbar popup's Pair: the one pairing window, focused when it is
+      // already open (a dApp's, with its attempt), else opened naming no dApp.
+      // Answered once the window is in front, so the popup closes after it.
+      return pairingWindow.open(undefined).then(
+        () => true,
+        () => false
+      );
+    }
     if (type === PAIRED_MESSAGE) {
       // The pairing page stored a new key: the socket authenticates with it,
       // and every dApp's connect may open the pairing window again should the
       // desktop drop this pairing.
-      pairingWindowPaired = true;
+      void pairingWindow.paired(sender.tab?.windowId).catch(() => undefined);
       void promptGate.cleared();
       client?.afterPairing();
       return heartbeat(true);

@@ -60,9 +60,12 @@ const FAILURES: Record<
     detail:
       'Start the desktop app and check the port in the extension’s popup, then try again.',
   },
+  // RequestPending: the desktop already shows a prompt, most often this very
+  // browser's first attempt, whose code dialog opened behind the browser.
   busy: {
-    title: 'Another pairing is open in AirNox Wallet',
-    detail: 'Finish or cancel it in the desktop app, then try again.',
+    title: 'AirNox Wallet is already showing a prompt',
+    detail:
+      'It may be behind this browser window. Finish or cancel it in AirNox Wallet, then try again.',
     tone: 'warn',
   },
   cooldown: {
