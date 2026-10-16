@@ -57,8 +57,9 @@
 //      restore (it forgot the binding: a lock) makes the page forget them.
 //  10. PAIRED          → pairing by code and the socket handshake: a browser
 //      with no pairing key is refused (1002); a sign or a polled read opens
-//      nothing, the dApp's connect opens one pairing page naming the dApp, and
-//      the page asks the desktop for nothing until the person presses Pair;
+//      nothing, the dApp's connect opens one pairing page naming the dApp (the
+//      toolbar popup's Pair then opens no second one), and the page asks the
+//      desktop for nothing until the person presses Pair;
 //      the page pairs it on the socket the worker holds, with the code the
 //      desktop shows, and that socket authenticates; every socket
 //      authenticates (begin, finish) before its sys_resume and any dApp frame;
@@ -505,6 +506,18 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
       });
       await sleep(800);
       const pagesAfterConnects = pairingPages();
+      // The toolbar popup's Pair, while the dApp's window is open: the worker
+      // focuses that window, and no second pairing page opens.
+      const toolbar = await context.newPage();
+      await toolbar.goto(
+        `chrome-extension://${extensionId}/src/popup/popup.html`
+      );
+      await toolbar.click('#pairOpen');
+      await sleep(800);
+      const pagesAfterToolbarPair = pairingPages();
+      if (!toolbar.isClosed()) {
+        await toolbar.close();
+      }
       const beginsBeforePress = desktop.pairBegins.length;
       // 2. The page pairs by code on the socket the worker holds, which then
       // authenticates with the key.
@@ -630,6 +643,7 @@ async function pairedScenario({ label, stubVersion, profileDir, log }) {
         connectKeyless,
         connectAgain,
         pagesAfterConnects,
+        pagesAfterToolbarPair,
         beginsBeforePress,
         pagesAfterUnpairedSign,
         connectUnpaired,
@@ -682,10 +696,11 @@ function assertPaired(r, failures) {
   );
   check(
     failures,
-    'without a pairing key the connect is refused with 1002 and opens one pairing page naming it, which asks the desktop for nothing until Pair is pressed',
+    'without a pairing key the connect is refused with 1002 and opens one pairing page naming it (the toolbar Pair opens no second one), which asks the desktop for nothing until Pair is pressed',
     r.connectKeyless?.error === 1002 &&
       r.connectAgain?.error === 1002 &&
       r.pagesAfterConnects === 1 &&
+      r.pagesAfterToolbarPair === 1 &&
       r.beginsBeforePress === 0 &&
       r.keylessOrigin === r.origin &&
       r.firstBegin?.origin === r.origin,
@@ -693,6 +708,7 @@ function assertPaired(r, failures) {
       connect: r.connectKeyless,
       again: r.connectAgain,
       pages: r.pagesAfterConnects,
+      afterToolbarPair: r.pagesAfterToolbarPair,
       beginsBeforePress: r.beginsBeforePress,
       opened: r.keylessOrigin,
       begin: r.firstBegin,

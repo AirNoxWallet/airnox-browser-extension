@@ -15,9 +15,8 @@ import {
   TransportSettings,
 } from '../transport/settings';
 import {
+  OPEN_PAIRING_MESSAGE,
   PAGE_HOLDERS_MESSAGE,
-  PAIRING_PAGE,
-  PAIRING_WINDOW,
   PageHoldersReply,
   SETTINGS_CHANGED_MESSAGE,
   StatusReply,
@@ -137,11 +136,12 @@ async function showPairing(iid: string): Promise<void> {
 }
 
 // The pairing page opens in its own small window, never in a tab beside the
-// dApps: the desktop app tells the person to type its code only there.
-
+// dApps: the desktop app tells the person to type its code only there. The
+// service worker opens it (OPEN_PAIRING_MESSAGE), never this page, so a window a
+// dApp's connect already opened is focused rather than joined by a second one.
 function openPairing(): void {
-  void browser.windows
-    .create({ url: browser.runtime.getURL(PAIRING_PAGE), ...PAIRING_WINDOW })
+  void browser.runtime
+    .sendMessage({ type: OPEN_PAIRING_MESSAGE })
     .then(() => window.close())
     .catch(() => undefined);
 }
