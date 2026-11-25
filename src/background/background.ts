@@ -182,12 +182,14 @@ const resumeStore: ResumeStore = {
 // ── the socket handshake ─────────────────────────────────────────────────────
 // The pairing key lives in IndexedDB as a non-extractable CryptoKey
 // (auth_key_store.ts); the worker only reads it, to authenticate each socket.
-// When a dApp's connect finds no pairing the desktop accepts, the pairing page
-// may open in its own small window, naming the dApp: at most once per origin
-// per cooldown (pairing_prompt.ts). The toolbar popup's Pair asks for the same
-// window (OPEN_PAIRING_MESSAGE). Either way there is one window at a time
-// (pairing_window.ts): an open one is focused instead of stacking another, and
-// its record lives in storage.session, so a restarted worker still knows it.
+// When a dApp's connect or EVM chain switch finds no pairing the desktop
+// accepts, the pairing page may open in its own small window, naming the dApp:
+// at most once per origin per cooldown (pairing_prompt.ts), since the switch
+// may come from a page's timer rather than the person's gesture. The toolbar
+// popup's Pair asks for the same window (OPEN_PAIRING_MESSAGE). Either way
+// there is one window at a time (pairing_window.ts): an open one is focused
+// instead of stacking another, and its record lives in storage.session, so a
+// restarted worker still knows it.
 // The page asks the desktop for a code only when the person presses Pair in it.
 const PAIRING_PROMPTS_KEY = 'airnox.pairingPrompts';
 const PAIRING_WINDOW_KEY = 'airnox.pairingWindow';
@@ -258,8 +260,8 @@ browser.windows.onRemoved.addListener((windowId) => {
         return;
       }
       if (!closed.paired && closed.origin !== undefined) {
-        // Closed without a pairing: the dApp's next connect opens nothing for
-        // a cooldown from now.
+        // Closed without a pairing: the dApp's next connect or chain switch
+        // opens nothing for a cooldown from now.
         void promptGate.declined(closed.origin);
       }
       // Closed without a pairing (a completed one already told the client).
@@ -462,8 +464,8 @@ browser.runtime.onMessage.addListener(
     }
     if (type === PAIRED_MESSAGE) {
       // The pairing page stored a new key: the socket authenticates with it,
-      // and every dApp's connect may open the pairing window again should the
-      // desktop drop this pairing.
+      // and every dApp's connect or chain switch may open the pairing window
+      // again should the desktop drop this pairing.
       void pairingWindow.paired(sender.tab?.windowId).catch(() => undefined);
       void promptGate.cleared();
       client?.afterPairing();

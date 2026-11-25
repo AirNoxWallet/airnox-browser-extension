@@ -1,13 +1,16 @@
-// When a dApp's connect (or its EVM chain switch) may open the pairing window.
+// When a dApp's connect or its EVM chain switch may open the pairing window.
 // The window asks the person to pair with the desktop app; a dApp that connects
 // or switches again and again (on every page load, on a timer, after each
-// refusal) must not put it in front of them again and again. So the window opens for an origin at most once per cooldown:
-// a connect from that origin inside it opens nothing and is refused as not
-// paired. The person closing the window without pairing starts the cooldown
-// again from that moment; a completed pairing lifts it for every origin.
+// refusal) must not put it in front of them again and again. A switch may come
+// with no user gesture at all, from a page's own timer. So the window opens
+// for an origin at most once per cooldown: a connect or switch from that
+// origin inside it opens nothing and is refused as not paired. The person
+// closing the window without pairing starts the cooldown again from that
+// moment; a completed pairing lifts it for every origin.
 //
 // The window itself asks the desktop for nothing until the person presses Pair
-// in it, so even an admitted connect raises nothing on the desktop by itself.
+// in it, so even an admitted connect or switch raises nothing on the desktop
+// by itself.
 //
 // Pure: the worker keeps the record through `load` / `save` (storage.session,
 // so a worker eviction does not reset it), and the clock is injected.
@@ -38,8 +41,8 @@ export const readPromptRecord = (raw: unknown): PromptRecord => {
 };
 
 export class PairingPromptGate {
-  // One decision at a time: two connects in the same tick must not both read
-  // the record before either wrote it.
+  // One decision at a time: two connects or switches in the same tick must not
+  // both read the record before either wrote it.
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -48,10 +51,10 @@ export class PairingPromptGate {
     private readonly cooldownMs: number = PAIRING_PROMPT_COOLDOWN_MS
   ) {}
 
-  // Whether a connect from `origin` may open the pairing window now; when it
-  // may, the opening is recorded. A record that cannot be read or written
-  // opens nothing: a missed window costs the person a click in the popup, a
-  // window that cannot be held back costs them a window per request.
+  // Whether a connect or chain switch from `origin` may open the pairing window
+  // now; when it may, the opening is recorded. A record that cannot be read or
+  // written opens nothing: a missed window costs the person a click in the
+  // popup, a window that cannot be held back costs them a window per request.
   admit(origin: string): Promise<boolean> {
     return this.serial(async () => {
       const at = this.now();
@@ -65,8 +68,8 @@ export class PairingPromptGate {
     }, false);
   }
 
-  // The person closed the window for `origin` without pairing: no connect
-  // from it opens the window again for a cooldown from now.
+  // The person closed the window for `origin` without pairing: no connect or
+  // chain switch from it opens the window again for a cooldown from now.
   declined(origin: string): Promise<void> {
     return this.serial(async () => {
       const at = this.now();
@@ -76,8 +79,8 @@ export class PairingPromptGate {
     }, undefined);
   }
 
-  // A pairing completed: the next connect from any origin may open the window
-  // (the desktop may drop the pairing again later).
+  // A pairing completed: the next connect or chain switch from any origin may
+  // open the window (the desktop may drop the pairing again later).
   cleared(): Promise<void> {
     return this.serial(() => this.store.save({}), undefined);
   }

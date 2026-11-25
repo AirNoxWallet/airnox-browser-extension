@@ -147,10 +147,13 @@ export type SocketAuth = {
   // Rejects when the store could not be read: the socket is then refused, never
   // served as if this browser held no key.
   loadKey(iid: string): Promise<CryptoKey | undefined>;
-  // A dApp's connect (opensPairing) found no pairing the desktop accepts: the
-  // person may pair on the extension's pairing page, which this may open for
-  // `origin` (the caller holds back a dApp that keeps connecting). Never called
-  // for any other request: a page polling a read raises nothing.
+  // A dApp's connect or EVM chain switch (opensPairing) found no pairing the
+  // desktop accepts: the person may pair on the extension's pairing page, which
+  // this may open for `origin`. The switch can come with no user gesture (a
+  // page may send it on its own timer), so no call here stands for one: the
+  // caller gates every call per origin before it shows anything (it holds back
+  // a dApp that keeps connecting or switching). Never called for any other
+  // request: a page polling a read raises nothing.
   pairingNeeded(origin: string): void;
   // Whether a socket must authenticate before it is bound. Defaults to the
   // rule at this extension's own protocol version: a desktop of another major
@@ -212,7 +215,7 @@ export const PAIRING_NEEDED_MESSAGE =
 // switch on its own timer; what bounds that is the worker's per-origin prompt
 // limit (PairingPromptGate: one window per origin per cooldown), not this list.
 // Keyed by method, which no other namespace reuses.
-const CONNECT_METHODS: ReadonlySet<string> = new Set([
+const PAIRING_PROMPT_METHODS: ReadonlySet<string> = new Set([
   'eth_requestAccounts',
   'wallet_requestPermissions',
   'wallet_switchEthereumChain',
@@ -225,7 +228,7 @@ const CONNECT_METHODS: ReadonlySet<string> = new Set([
 const NOT_PAIRED_CODE: number = ErrorCode.NotPaired;
 
 export const opensPairing = (req: Request): boolean =>
-  req.ns !== 'sys' && CONNECT_METHODS.has(req.method);
+  req.ns !== 'sys' && PAIRING_PROMPT_METHODS.has(req.method);
 
 // Does `req` hold the MV3 worker awake while it is in flight? A dApp request
 // does: the desktop may sit on it for minutes awaiting the person. So do the
