@@ -12,7 +12,10 @@ import {
   opensPairing,
 } from '../src/transport/ws_client';
 import { importAuthKey } from '../src/transport/auth_handshake';
-import { PairingPromptGate } from '../src/background/pairing_prompt';
+import {
+  PAIRING_PROMPT_COOLDOWN_MS,
+  PairingPromptGate,
+} from '../src/background/pairing_prompt';
 import { BackgroundRouter } from '../src/background/background_router';
 import { OutboundFrame, PortPoster } from '../src/background/post_to_port';
 import { PortRequest, PortResult } from '../src/protocol/bridge';
@@ -1690,16 +1693,18 @@ test('a malformed handshake answer does not withhold the key: the next socket of
 });
 
 // ── which requests may open the pairing page ─────────────────────────────────
-// Only a dApp's connect, never a read, a sign or a sys frame: a page polling a
-// read on a timer must not put a pairing window (and, once Pair is pressed, a
-// desktop code dialog) in front of the person.
+// Only a dApp's connect or its EVM chain switch, never a read, a sign or a sys
+// frame: a page polling a read on a timer must not put a pairing window (and,
+// once Pair is pressed, a desktop code dialog) in front of the person. A switch
+// sent on a timer is held to one window per origin per cooldown by the gate.
 
-test('the connect methods of every provider open the pairing page; nothing else does', () => {
+test('the connect methods of every provider and the EVM chain switch open the pairing page; nothing else does', () => {
   const req = (ns: Namespace, method: string) =>
     makeRequest(AUTH_IID, 'r', ns, DAPP, method);
   for (const [ns, method] of <Array<[Namespace, string]>>[
     ['evm', 'eth_requestAccounts'],
     ['evm', 'wallet_requestPermissions'],
+    ['evm', 'wallet_switchEthereumChain'],
     ['wstd', 'standard:connect'],
     ['tonconnect', 'tonConnect_connect'],
     ['tron', 'tron_requestAccounts'],
@@ -1712,7 +1717,8 @@ test('the connect methods of every provider open the pairing page; nothing else 
     ['evm', 'eth_call'],
     ['evm', 'personal_sign'],
     ['evm', 'eth_sendTransaction'],
-    ['evm', 'wallet_switchEthereumChain'],
+    ['evm', 'eth_chainId'],
+    ['evm', 'wallet_addEthereumChain'],
     ['tonconnect', 'tonConnect_restoreConnection'],
     ['wstd', 'standard:disconnect'],
     ['sys', 'eth_requestAccounts'],
@@ -1809,6 +1815,86 @@ test('a polling dApp raises at most one pairing prompt: reads open nothing, and 
     await Promise.all(admitting);
     assert.equal(probe.needed.length, 10); // the connects asked
     assert.deepEqual(opened, [DAPP]); // one window
+    assert.deepEqual(
+      methods(ws).filter((m) => m !== 'sys_ping'),
+      []
+    );
+  });
+});
+
+test('a pairing the desktop no longer holds: a dApp switching the chain before it connects hears 1002 and asks for the pairing page', async () => {
+  await withMockSocket(async () => {
+    const probe = await pairedProbe();
+    const { ws, reqP } = await openWithAuth(
+      authFor(probe),
+      'wallet_switchEthereumChain'
+    );
+    await refuseBegin(ws, 1, ErrorCode.NotPaired); // the socket's own
+    await refuseBegin(ws, 2, ErrorCode.NotPaired); // the dApp's
+    const resp = await reqP;
+    assert.equal(resp.error?.code, ErrorCode.NotPaired);
+    assert.deepEqual(probe.needed, [DAPP]);
+  });
+});
+
+test('a chain switch on a timer opens one pairing window per origin per cooldown; a read or a sign beside it opens nothing', async () => {
+  await withMockSocket(async () => {
+    let record = {};
+    let now = 1_000_000;
+    const gate = new PairingPromptGate(
+      {
+        load: () => Promise.resolve(record),
+        save: (r) => {
+          record = r;
+          return Promise.resolve();
+        },
+      },
+      () => now
+    );
+    const opened: string[] = [];
+    const admitting: Promise<void>[] = [];
+    const probe: AuthProbe = { key: undefined, needed: [] };
+    const auth: SocketAuth = {
+      ...authFor(probe),
+      pairingNeeded: (origin) => {
+        probe.needed.push(origin);
+        admitting.push(
+          gate.admit(origin).then((ok) => {
+            if (ok) {
+              opened.push(origin);
+            }
+          })
+        );
+      },
+    };
+    const { client, ws, reqP } = await openWithAuth(
+      auth,
+      'wallet_switchEthereumChain'
+    );
+    assert.equal((await reqP).error?.code, ErrorCode.NotPaired);
+    await Promise.all(admitting);
+    assert.deepEqual(opened, [DAPP]); // the first switch opens the window
+    const send = async (rid: string, method: string) => {
+      const resp = await client.send(
+        makeRequest(AUTH_IID, rid, 'evm', DAPP, method)
+      );
+      assert.equal(resp.error?.code, ErrorCode.NotPaired, method);
+      await Promise.all(admitting);
+    };
+    // Inside the cooldown: the switch asks again, the gate holds it back.
+    now += PAIRING_PROMPT_COOLDOWN_MS - 60_000;
+    await send('rid-switch-2', 'wallet_switchEthereumChain');
+    assert.equal(probe.needed.length, 2);
+    assert.deepEqual(opened, [DAPP]);
+    // A read and a sign never ask at all.
+    await send('rid-chain-id', 'eth_chainId');
+    await send('rid-sign', 'personal_sign');
+    assert.equal(probe.needed.length, 2);
+    assert.deepEqual(opened, [DAPP]);
+    // Past the cooldown the switch may open the window again.
+    now += 120_000;
+    await send('rid-switch-3', 'wallet_switchEthereumChain');
+    assert.deepEqual(opened, [DAPP, DAPP]);
     assert.deepEqual(
       methods(ws).filter((m) => m !== 'sys_ping'),
       []
