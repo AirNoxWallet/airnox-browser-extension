@@ -199,17 +199,23 @@ export const INTERCEPTION_MESSAGE =
 export const PAIRING_KEY_UNREADABLE_MESSAGE =
   "AirNox could not read this browser's pairing key; try again, or pair again from the Pairing row of the AirNox extension's popup.";
 
-// What a dApp hears when the person must pair first. A connect may have opened
-// the pairing window; any other request opened nothing.
+// What a dApp hears when the person must pair first. A connect or an EVM chain
+// switch may have opened the pairing window; any other request opened nothing.
 export const PAIRING_NEEDED_MESSAGE =
   "This browser is not paired with AirNox Wallet: pair it in the AirNox pairing window or from the Pairing row of the AirNox extension's popup, type the code the desktop app shows, then try again.";
 
 // The requests that may open the pairing window: a dApp asking to connect (the
-// person's own gesture, as a rule), never a read, a sign or anything a page
-// can send on its own timer. Keyed by method, which no other namespace reuses.
+// person's own gesture, as a rule), never a read or a sign. The EVM chain
+// switch is in too: many dApps send it before they connect, as the first step
+// of their Connect button, and a 1002 on it would otherwise leave the person
+// with no window and a connect that never comes. A page can also send the
+// switch on its own timer; what bounds that is the worker's per-origin prompt
+// limit (PairingPromptGate: one window per origin per cooldown), not this list.
+// Keyed by method, which no other namespace reuses.
 const CONNECT_METHODS: ReadonlySet<string> = new Set([
   'eth_requestAccounts',
   'wallet_requestPermissions',
+  'wallet_switchEthereumChain',
   'standard:connect',
   'tonConnect_connect',
   'tron_requestAccounts',

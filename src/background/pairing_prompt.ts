@@ -1,7 +1,7 @@
-// When a dApp's connect may open the pairing window. The window asks the person
-// to pair with the desktop app; a dApp that connects again and again (on every
-// page load, on a timer, after each refusal) must not put it in front of them
-// again and again. So the window opens for an origin at most once per cooldown:
+// When a dApp's connect (or its EVM chain switch) may open the pairing window.
+// The window asks the person to pair with the desktop app; a dApp that connects
+// or switches again and again (on every page load, on a timer, after each
+// refusal) must not put it in front of them again and again. So the window opens for an origin at most once per cooldown:
 // a connect from that origin inside it opens nothing and is refused as not
 // paired. The person closing the window without pairing starts the cooldown
 // again from that moment; a completed pairing lifts it for every origin.
